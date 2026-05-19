@@ -1,0 +1,123 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Import Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@layer base {
+  :root {
+    --bg-primary:   #050816;
+    --bg-secondary: #0a0f1e;
+    --bg-card:      #0f1629;
+    --border:       #1e2a3d;
+    --neon-blue:    #00d4ff;
+    --neon-violet:  #a855f7;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--bg-primary);
+    color: #e2e8f0;
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Scrollbar custom */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #0a0f1e; }
+  ::-webkit-scrollbar-thumb {
+    background: #1e2a3d;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: #00d4ff44; }
+}
+
+@layer components {
+  /* Cartes néon */
+  .card {
+    @apply bg-dark-800 border border-dark-600 rounded-2xl;
+    box-shadow: 0 4px 24px #00000066, inset 0 1px 0 #ffffff08;
+  }
+
+  .card-glow-blue {
+    @apply card;
+    box-shadow: 0 4px 24px #00000066, 0 0 0 1px #00d4ff22, inset 0 1px 0 #ffffff08;
+  }
+
+  .card-glow-violet {
+    @apply card;
+    box-shadow: 0 4px 24px #00000066, 0 0 0 1px #a855f722, inset 0 1px 0 #ffffff08;
+  }
+
+  /* Badge */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+  .badge-blue   { @apply badge bg-neon-blue/10 text-neon-blue border border-neon-blue/20; }
+  .badge-violet { @apply badge bg-neon-violet/10 text-neon-violet border border-neon-violet/20; }
+  .badge-green  { @apply badge bg-emerald-500/10 text-emerald-400 border border-emerald-500/20; }
+  .badge-orange { @apply badge bg-orange-500/10 text-orange-400 border border-orange-500/20; }
+  .badge-red    { @apply badge bg-red-500/10 text-red-400 border border-red-500/20; }
+
+  /* Boutons */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm
+           bg-neon-blue text-dark-950 hover:brightness-110 active:scale-95
+           transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm
+           bg-dark-700 text-slate-300 border border-dark-600
+           hover:bg-dark-600 active:scale-95 transition-all duration-150;
+  }
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm
+           bg-red-500/20 text-red-400 border border-red-500/30
+           hover:bg-red-500/30 active:scale-95 transition-all duration-150;
+  }
+
+  /* Inputs */
+  .input {
+    @apply w-full px-3.5 py-2.5 rounded-xl text-sm text-slate-100
+           bg-dark-700 border border-dark-600 outline-none
+           placeholder:text-slate-500
+           focus:border-neon-blue/50 focus:ring-2 focus:ring-neon-blue/10
+           transition-all duration-150;
+  }
+  .label {
+    @apply block text-xs font-medium text-slate-400 mb-1.5;
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    @apply bg-gradient-to-r from-neon-blue to-neon-violet bg-clip-text text-transparent;
+  }
+
+  /* Neon dot indicator */
+  .dot-online {
+    @apply w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_#34d399];
+  }
+  .dot-offline {
+    @apply w-2 h-2 rounded-full bg-slate-500;
+  }
+}
+
+@layer utilities {
+  .text-balance { text-wrap: balance; }
+
+  /* Grid responsive tablette → desktop */
+  .stats-grid {
+    @apply grid grid-cols-2 gap-4 sm:grid-cols-2 lg:grid-cols-4;
+  }
+}
