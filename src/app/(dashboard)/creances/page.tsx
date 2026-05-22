@@ -42,10 +42,14 @@ export default function CreancesPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // ── Marquer une créance soldée ──────────────────────────────────────────────
-  async function settleCreance(id: string) {
+  // ── Marquer une créance soldée (vente ou troc) ─────────────────────────────
+  async function settleCreance(id: string, type: 'vente' | 'troc') {
     setSaving(id);
-    await supabase.from('sales').update({ is_settled: true }).eq('id', id);
+    if (type === 'troc') {
+      await supabase.from('trocs').update({ is_settled: true }).eq('id', id);
+    } else {
+      await supabase.from('sales').update({ is_settled: true }).eq('id', id);
+    }
     setSaving(null);
     loadData();
   }
@@ -59,8 +63,8 @@ export default function CreancesPage() {
   }
 
   // ── Totaux ──────────────────────────────────────────────────────────────────
-  const totalCreances        = creances.filter(c => !c.is_settled).reduce((s, c) => s + c.total, 0);
-  const totalCreancesOverdue = creances.filter(c => c.is_overdue).reduce((s, c) => s + c.total, 0);
+  const totalCreances        = creances.filter(c => !c.is_settled).reduce((s, c) => s + c.amount, 0);
+  const totalCreancesOverdue = creances.filter(c => c.is_overdue).reduce((s, c) => s + c.amount, 0);
   const totalDettes          = dettes.filter(d => !d.is_settled).reduce((s, d) => s + d.amount, 0);
   const totalDettesOverdue   = dettes.filter(d => d.is_overdue).reduce((s, d) => s + d.amount, 0);
 
@@ -185,10 +189,11 @@ export default function CreancesPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-dark-600">
-                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">N° Vente</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Référence</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Type</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Client</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Vendeur</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Date vente</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Par</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide whitespace-nowrap">Date</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Échéance</th>
                     <th className="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Montant</th>
                     <th className="text-center px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Statut</th>
@@ -206,10 +211,15 @@ export default function CreancesPage() {
                         :                'hover:bg-dark-700/30'
                       )}
                     >
-                      <td className="px-4 py-3 font-mono text-neon-blue text-xs">{c.sale_number}</td>
+                      <td className="px-4 py-3 font-mono text-xs font-semibold text-neon-blue">{c.reference_number}</td>
+                      <td className="px-4 py-3">
+                        {c.type === 'troc'
+                          ? <span className="badge-violet text-xs">Troc</span>
+                          : <span className="badge-blue text-xs">Vente</span>}
+                      </td>
                       <td className="px-4 py-3 text-slate-300">{c.client_name ?? <span className="text-slate-600 italic">—</span>}</td>
-                      <td className="px-4 py-3 text-slate-400">{c.seller_name}</td>
-                      <td className="px-4 py-3 text-slate-400">{formatDate(c.created_at)}</td>
+                      <td className="px-4 py-3 text-slate-400 text-xs">{c.creator_name}</td>
+                      <td className="px-4 py-3 text-slate-400 whitespace-nowrap text-xs">{formatDate(c.created_at)}</td>
                       <td className="px-4 py-3">
                         {c.credit_due_date ? (
                           <span className={cn(
@@ -221,7 +231,7 @@ export default function CreancesPage() {
                           </span>
                         ) : <span className="text-slate-600 text-xs">—</span>}
                       </td>
-                      <td className="px-4 py-3 text-right font-semibold text-white">{fmt(c.total)}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-white">{fmt(c.amount)}</td>
                       <td className="px-4 py-3 text-center">
                         {c.is_settled ? (
                           <span className="badge-green text-xs">Soldé</span>
@@ -236,7 +246,7 @@ export default function CreancesPage() {
                       <td className="px-4 py-3 text-right">
                         {!c.is_settled && (
                           <button
-                            onClick={() => settleCreance(c.id)}
+                            onClick={() => settleCreance(c.id, c.type)}
                             disabled={saving === c.id}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
                                        bg-emerald-500/10 text-emerald-400 border border-emerald-500/20
@@ -253,7 +263,7 @@ export default function CreancesPage() {
                 {/* Total */}
                 <tfoot>
                   <tr className="border-t border-dark-600 bg-dark-800/60">
-                    <td colSpan={5} className="px-4 py-3 text-xs font-medium text-slate-400">
+                    <td colSpan={6} className="px-4 py-3 text-xs font-medium text-slate-400">
                       Total non soldé
                     </td>
                     <td className="px-4 py-3 text-right font-bold text-neon-blue">

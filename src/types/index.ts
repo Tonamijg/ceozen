@@ -183,14 +183,37 @@ export interface VStockAlert {
 
 export interface VCreance {
   id: string;
-  sale_number: string;
-  total: number;
+  type: 'vente' | 'troc';
+  reference_number: string;
+  amount: number;
   created_at: string;
   client_name?: string;
   credit_due_date?: string;
   is_settled: boolean;
-  seller_name: string;
+  creator_name: string;
   is_overdue: boolean;
+}
+
+// ---------- Troc ----------
+export interface Troc {
+  id: string;
+  troc_number: string;
+  client_name?: string;
+  client_phone?: string;
+  product_given_id?: string;
+  product_given_name: string;
+  product_given_price: number;
+  product_received_id?: string;
+  product_received_name: string;
+  product_received_ref?: string;
+  product_received_value: number;
+  complement: number;
+  payment_method: PaymentMethod;
+  is_settled: boolean;
+  credit_due_date?: string;
+  notes?: string;
+  created_by?: string;
+  created_at: string;
 }
 
 export interface VDette {

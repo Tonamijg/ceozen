@@ -7,7 +7,7 @@ import type { Profile } from '@/types';
 import {
   LayoutDashboard, ShoppingCart, Receipt, Package,
   BarChart3, User, LogOut, Smartphone, ChevronRight, X,
-  Users, Landmark
+  Users, Landmark, ArrowLeftRight
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -33,6 +33,12 @@ const NAV_ITEMS = [
     label: 'Créances & Dettes',
     href: '/creances',
     icon: Landmark,
+    roles: ['admin', 'collaborateur'],
+  },
+  {
+    label: 'Trocs',
+    href: '/trocs',
+    icon: ArrowLeftRight,
     roles: ['admin', 'collaborateur'],
   },
   {

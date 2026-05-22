@@ -17,6 +17,7 @@ const PAGE_TITLES: Record<string, { title: string; subtitle?: string }> = {
   '/creances':      { title: 'Créances & Dettes',  subtitle: 'Suivi des paiements en crédit' },
   '/utilisateurs':  { title: 'Utilisateurs',      subtitle: 'Gestion des accès et des rôles' },
   '/profil':        { title: 'Mon profil',        subtitle: 'Paramètres de ton compte' },
+  '/trocs':         { title: 'Trocs',             subtitle: 'Échanges de téléphones avec complément' },
 };
 
 interface DashboardShellProps {
