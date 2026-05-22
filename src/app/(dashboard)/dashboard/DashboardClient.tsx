@@ -130,6 +130,7 @@ export default function DashboardClient({
 
     const [
       { data: periodSales },
+      { data: periodTrocs },
       { data: periodExpenses },
       { data: newAlerts },
       { data: newSales },
@@ -137,6 +138,7 @@ export default function DashboardClient({
       { data: expensesChart },
     ] = await Promise.all([
       supabase.from('sales').select('total').gte('created_at', from).lte('created_at', to),
+      supabase.from('trocs').select('complement').gte('created_at', from).lte('created_at', to),
       supabase.from('expenses').select('amount').gte('expense_date', from.split('T')[0]).lte('expense_date', to.split('T')[0]),
       supabase.from('v_stock_alerts').select('*').eq('is_low_stock', true).order('stock_qty').limit(10),
       supabase.from('v_sales').select('*').order('created_at', { ascending: false }).limit(20),
@@ -144,8 +146,10 @@ export default function DashboardClient({
       supabase.from('expenses').select('amount, expense_date').gte('expense_date', from.split('T')[0]).lte('expense_date', to.split('T')[0]),
     ]);
 
-    const revenue  = periodSales?.reduce((s, x) => s + (x.total  ?? 0), 0) ?? 0;
-    const expenses = periodExpenses?.reduce((s, x) => s + (x.amount ?? 0), 0) ?? 0;
+    const salesRevenue = periodSales?.reduce((s, x) => s + (x.total     ?? 0), 0) ?? 0;
+    const trocsRevenue = periodTrocs?.reduce((s, x) => s + (x.complement ?? 0), 0) ?? 0;
+    const revenue    = salesRevenue + trocsRevenue;
+    const expenses   = periodExpenses?.reduce((s, x) => s + (x.amount ?? 0), 0) ?? 0;
     const salesCount = periodSales?.length ?? 0;
 
     setStats(prev => ({

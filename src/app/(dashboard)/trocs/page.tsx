@@ -331,12 +331,12 @@ export default function TrocsPage() {
                   <div>
                     <label className="text-xs text-slate-500 mb-1 block">Nom</label>
                     <input type="text" value={clientName} onChange={e => setClientName(e.target.value)}
-                      placeholder="Kouamé Jean" className="input-field w-full" />
+                      placeholder="Kouamé Jean" className="input w-full" />
                   </div>
                   <div>
                     <label className="text-xs text-slate-500 mb-1 block">Téléphone</label>
                     <input type="text" value={clientPhone} onChange={e => setClientPhone(e.target.value)}
-                      placeholder="07 XX XX XX XX" className="input-field w-full" />
+                      placeholder="07 XX XX XX XX" className="input w-full" />
                   </div>
                 </div>
               </div>
@@ -360,7 +360,7 @@ export default function TrocsPage() {
                           setSelectedProd(p);
                           if (p) setGivenPrice(String(p.sell_price));
                         }}
-                        className="input-field w-full"
+                        className="input w-full"
                       >
                         <option value="">Sélectionner…</option>
                         {products.map(p => (
@@ -371,7 +371,7 @@ export default function TrocsPage() {
                     <div>
                       <label className="text-xs text-slate-500 mb-1 block">Prix de vente (FCFA) *</label>
                       <input type="number" value={givenPrice} onChange={e => setGivenPrice(e.target.value)}
-                        placeholder="180000" className="input-field w-full" />
+                        placeholder="180000" className="input w-full" />
                     </div>
                   </div>
 
@@ -388,17 +388,17 @@ export default function TrocsPage() {
                     <div>
                       <label className="text-xs text-slate-500 mb-1 block">Nom du téléphone *</label>
                       <input type="text" value={receivedName} onChange={e => setReceivedName(e.target.value)}
-                        placeholder="iPhone 11 64Go" className="input-field w-full" />
+                        placeholder="iPhone 11 64Go" className="input w-full" />
                     </div>
                     <div>
                       <label className="text-xs text-slate-500 mb-1 block">Référence</label>
                       <input type="text" value={receivedRef} onChange={e => setReceivedRef(e.target.value)}
-                        placeholder="IP11-64-BLK" className="input-field w-full" />
+                        placeholder="IP11-64-BLK" className="input w-full" />
                     </div>
                     <div>
                       <label className="text-xs text-slate-500 mb-1 block">Valeur estimée (FCFA) *</label>
                       <input type="number" value={receivedValue} onChange={e => setReceivedValue(e.target.value)}
-                        placeholder="80000" className="input-field w-full" />
+                        placeholder="80000" className="input w-full" />
                     </div>
                   </div>
                 </div>
@@ -455,7 +455,7 @@ export default function TrocsPage() {
                   <div className="mt-3">
                     <label className="text-xs text-slate-500 mb-1 block">Date d'échéance</label>
                     <input type="date" value={creditDueDate} onChange={e => setCreditDueDate(e.target.value)}
-                      className="input-field w-full" />
+                      className="input w-full" />
                   </div>
                 )}
               </div>
@@ -468,7 +468,7 @@ export default function TrocsPage() {
                   onChange={e => setNotes(e.target.value)}
                   placeholder="État du téléphone repris, remarques..."
                   rows={2}
-                  className="input-field w-full resize-none"
+                  className="input w-full resize-none"
                 />
               </div>
 

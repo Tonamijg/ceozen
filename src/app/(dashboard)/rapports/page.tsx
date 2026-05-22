@@ -75,9 +75,10 @@ export default function RapportsPage() {
     const from = period.from + 'T00:00:00';
     const to   = period.to   + 'T23:59:59';
 
-    const [{ data: salesData }, { data: expData }, { data: items }, { data: salesWithSeller }, { data: expenses }, { data: stock }] =
+    const [{ data: salesData }, { data: trocsData }, { data: expData }, { data: items }, { data: salesWithSeller }, { data: expenses }, { data: stock }] =
       await Promise.all([
         supabase.from('sales').select('id, total, created_at').gte('created_at', from).lte('created_at', to),
+        supabase.from('trocs').select('complement').gte('created_at', from).lte('created_at', to),
         supabase.from('expenses').select('amount').gte('expense_date', period.from).lte('expense_date', period.to),
         supabase.from('sale_items').select('product_id, qty, total, product:products(name), sale:sales!inner(created_at)').gte('sale.created_at', from).lte('sale.created_at', to),
         supabase.from('v_sales').select('seller_name, total').gte('created_at', from).lte('created_at', to),
@@ -85,10 +86,12 @@ export default function RapportsPage() {
         supabase.from('v_stock_alerts').select('*').order('name'),
       ]);
 
-    const rev = salesData?.reduce((s, x) => s + (x.total ?? 0), 0) ?? 0;
+    const salesRev = salesData?.reduce((s, x) => s + (x.total      ?? 0), 0) ?? 0;
+    const trocsRev = trocsData?.reduce((s, x) => s + (x.complement ?? 0), 0) ?? 0;
+    const rev = salesRev + trocsRev;
     setTotalRevenue(rev);
     setSalesCount(salesData?.length ?? 0);
-    setAvgSale(salesData?.length ? rev / salesData.length : 0);
+    setAvgSale(salesData?.length ? salesRev / salesData.length : 0);
     setTotalExpenses(expData?.reduce((s, x) => s + (x.amount ?? 0), 0) ?? 0);
 
     // Top produits
@@ -149,11 +152,11 @@ export default function RapportsPage() {
         [`Période : ${formatDate(period.from)} → ${formatDate(period.to)}`],
         [],
         ['Indicateur', 'Valeur'],
-        ["Chiffre d'affaires", totalRevenue],
+        ["Chiffre d'affaires total (ventes + trocs)", totalRevenue],
         ['Dépenses', totalExpenses],
         ['Marge nette', margin],
         ['Nombre de ventes', salesCount],
-        ['Panier moyen', avgSale],
+        ['Panier moyen (ventes)', avgSale],
         ['Valeur du stock', totalStockValue],
       ];
       const wsSummary = XLSX.utils.aoa_to_sheet(summary);
@@ -206,7 +209,7 @@ export default function RapportsPage() {
         XLSX.utils.book_append_sheet(wb, wsExp, 'Dépenses');
       }
 
-      XLSX.writeFile(wb, `ktech-rapport-${period.from}-${period.to}.xlsx`);
+      XLSX.writeFile(wb, `ceozen-rapport-${period.from}-${period.to}.xlsx`);
     } finally {
       setExporting(false);
     }
