@@ -7,7 +7,7 @@ import type { VStockAlert } from '@/types';
 import {
   BarChart3, TrendingUp, Package, Receipt,
   Download, RefreshCw, FileSpreadsheet, Printer,
-  ShoppingCart, AlertTriangle
+  ShoppingCart, AlertTriangle, ArrowLeftRight
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -62,6 +62,8 @@ export default function RapportsPage() {
   const [totalRevenue,   setTotalRevenue]   = useState(0);
   const [totalExpenses,  setTotalExpenses]  = useState(0);
   const [salesCount,     setSalesCount]     = useState(0);
+  const [trocsCount,     setTrocsCount]     = useState(0);
+  const [trocsRevenue,   setTrocsRevenue]   = useState(0);
   const [avgSale,        setAvgSale]        = useState(0);
   const [topProducts,    setTopProducts]    = useState<TopProduct[]>([]);
   const [sellerStats,    setSellerStats]    = useState<SellerStat[]>([]);
@@ -90,6 +92,8 @@ export default function RapportsPage() {
     const trocsRev = trocsData?.reduce((s, x) => s + (x.complement ?? 0), 0) ?? 0;
     const rev = salesRev + trocsRev;
     setTotalRevenue(rev);
+    setTrocsRevenue(trocsRev);
+    setTrocsCount(trocsData?.length ?? 0);
     setSalesCount(salesData?.length ?? 0);
     setAvgSale(salesData?.length ? salesRev / salesData.length : 0);
     setTotalExpenses(expData?.reduce((s, x) => s + (x.amount ?? 0), 0) ?? 0);
@@ -274,14 +278,29 @@ export default function RapportsPage() {
       </div>
 
       {/* Ligne 2 : stats supplémentaires */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
         <div className="card p-5">
           <p className="text-xs text-slate-500 mb-1">Panier moyen</p>
           <p className="text-xl font-bold text-white">{loading ? '—' : formatCFA(avgSale, true)}</p>
+          <p className="text-[10px] text-slate-600 mt-1">par vente</p>
+        </div>
+        <div className="card p-5 border-l-2 border-neon-violet/40">
+          <div className="flex items-center gap-1.5 mb-1">
+            <ArrowLeftRight className="w-3.5 h-3.5 text-neon-violet" />
+            <p className="text-xs text-slate-500">Trocs</p>
+          </div>
+          <p className="text-xl font-bold text-white">{loading ? '—' : trocsCount}</p>
+          <p className="text-[10px] text-slate-600 mt-1">opérations</p>
+        </div>
+        <div className="card p-5 border-l-2 border-neon-violet/40">
+          <p className="text-xs text-slate-500 mb-1">CA Trocs</p>
+          <p className="text-xl font-bold text-neon-violet">{loading ? '—' : formatCFA(trocsRevenue, true)}</p>
+          <p className="text-[10px] text-slate-600 mt-1">compléments encaissés</p>
         </div>
         <div className="card p-5">
           <p className="text-xs text-slate-500 mb-1">Valeur du stock</p>
           <p className="text-xl font-bold text-white">{loading ? '—' : formatCFA(totalStockValue, true)}</p>
+          <p className="text-[10px] text-slate-600 mt-1">au prix d'achat</p>
         </div>
         <div className="card p-5">
           <p className="text-xs text-slate-500 mb-1">Produits en alerte</p>
@@ -289,6 +308,7 @@ export default function RapportsPage() {
             <p className="text-xl font-bold text-white">{stockSnapshot.filter(p => p.is_low_stock).length}</p>
             {stockSnapshot.some(p => p.is_low_stock) && <AlertTriangle className="w-4 h-4 text-orange-400" />}
           </div>
+          <p className="text-[10px] text-slate-600 mt-1">stock faible</p>
         </div>
       </div>
 

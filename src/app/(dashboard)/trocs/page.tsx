@@ -5,9 +5,11 @@ import { createClient } from '@/lib/supabase/client';
 import type { Troc, Product } from '@/types';
 import {
   ArrowLeftRight, Plus, RefreshCw, X, Check,
-  CheckCircle2, Smartphone, Clock, AlertTriangle
+  CheckCircle2, Smartphone, Clock, Package, Printer
 } from 'lucide-react';
 import { formatDate, cn } from '@/lib/utils';
+import { printTrocReceipt } from '@/lib/print';
+import { PAYMENT_LABELS } from '@/types';
 
 function fmt(n: number) {
   return new Intl.NumberFormat('fr-FR').format(Math.round(n)) + ' FCFA';
@@ -28,11 +30,13 @@ async function getNextTrocNumber(supabase: ReturnType<typeof createClient>): Pro
 export default function TrocsPage() {
   const supabase = createClient();
 
-  const [trocs,    setTrocs]    = useState<Troc[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading,  setLoading]  = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [saving,   setSaving]   = useState(false);
+  const [trocs,      setTrocs]      = useState<Troc[]>([]);
+  const [products,   setProducts]   = useState<Product[]>([]);
+  const [reprises,   setReprises]   = useState<Product[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [showModal,  setShowModal]  = useState(false);
+  const [saving,     setSaving]     = useState(false);
+  const [activeTab,  setActiveTab]  = useState<'historique' | 'reprises'>('historique');
 
   // ── Formulaire ────────────────────────────────────────────────────────────
   const [clientName,     setClientName]     = useState('');
@@ -51,12 +55,14 @@ export default function TrocsPage() {
   // ── Chargement ────────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [{ data: t }, { data: p }] = await Promise.all([
+    const [{ data: t }, { data: p }, { data: r }] = await Promise.all([
       supabase.from('trocs').select('*').order('created_at', { ascending: false }),
       supabase.from('products').select('*').eq('is_active', true).gt('stock_qty', 0).order('name'),
+      supabase.from('products').select('*').ilike('description', 'Reprise troc%').order('created_at', { ascending: false }),
     ]);
     setTrocs((t ?? []) as Troc[]);
     setProducts((p ?? []) as Product[]);
+    setReprises((r ?? []) as Product[]);
     setLoading(false);
   }, [supabase]);
 
@@ -208,89 +214,209 @@ export default function TrocsPage() {
         </div>
       </div>
 
-      {/* ── Tableau ─────────────────────────────────────────────────────────── */}
+      {/* ── Onglets ─────────────────────────────────────────────────────────── */}
       <div className="card overflow-hidden">
-        <div className="px-4 py-3 border-b border-dark-600 flex items-center gap-2">
-          <ArrowLeftRight className="w-4 h-4 text-neon-violet" />
-          <h3 className="text-sm font-semibold text-slate-200">Historique des trocs</h3>
+        {/* Tab headers */}
+        <div className="flex border-b border-dark-600 px-2">
+          <button
+            onClick={() => setActiveTab('historique')}
+            className={cn(
+              'flex items-center gap-2 px-4 py-3.5 text-sm font-medium border-b-2 transition-colors',
+              activeTab === 'historique'
+                ? 'border-neon-violet text-neon-violet'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            )}
+          >
+            <ArrowLeftRight className="w-4 h-4" />
+            Historique
+            {trocs.length > 0 && (
+              <span className="ml-1 bg-neon-violet/20 text-neon-violet text-xs px-1.5 py-0.5 rounded-full">
+                {trocs.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('reprises')}
+            className={cn(
+              'flex items-center gap-2 px-4 py-3.5 text-sm font-medium border-b-2 transition-colors',
+              activeTab === 'reprises'
+                ? 'border-emerald-400 text-emerald-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            )}
+          >
+            <Package className="w-4 h-4" />
+            Reprises en stock
+            {reprises.length > 0 && (
+              <span className="ml-1 bg-emerald-500/20 text-emerald-400 text-xs px-1.5 py-0.5 rounded-full">
+                {reprises.length}
+              </span>
+            )}
+          </button>
         </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-20 text-slate-500 text-sm">Chargement…</div>
-        ) : trocs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-3 text-slate-500">
-            <ArrowLeftRight className="w-10 h-10 opacity-20" />
-            <p className="text-sm">Aucun troc enregistré</p>
-            <button
-              onClick={() => setShowModal(true)}
-              className="text-xs text-neon-violet hover:underline"
-            >
-              Enregistrer le premier troc →
-            </button>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-dark-600">
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">N° Troc</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Client</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Donné au client</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Repris au client</th>
-                  <th className="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Complément</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide whitespace-nowrap">Date</th>
-                  <th className="text-center px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Paiement</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-dark-600/50">
-                {trocs.map((t) => (
-                  <tr key={t.id} className="hover:bg-dark-700/30 transition-colors">
-                    <td className="px-4 py-3 font-mono text-neon-violet text-xs font-semibold">{t.troc_number}</td>
-                    <td className="px-4 py-3">
-                      <p className="text-slate-300 text-sm">{t.client_name ?? <span className="text-slate-600 italic text-xs">Anonyme</span>}</p>
-                      {t.client_phone && <p className="text-xs text-slate-500">{t.client_phone}</p>}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5">
-                        <Smartphone className="w-3.5 h-3.5 text-red-400/60 flex-shrink-0" />
-                        <span className="text-slate-300 text-xs">{t.product_given_name}</span>
-                      </div>
-                      <p className="text-xs text-slate-500 mt-0.5 ml-5">{fmt(t.product_given_price)}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5">
-                        <Smartphone className="w-3.5 h-3.5 text-emerald-400/60 flex-shrink-0" />
-                        <span className="text-slate-300 text-xs">{t.product_received_name}</span>
-                      </div>
-                      <p className="text-xs text-slate-500 mt-0.5 ml-5">{fmt(t.product_received_value)}</p>
-                    </td>
-                    <td className="px-4 py-3 text-right font-bold text-neon-violet">{fmt(t.complement)}</td>
-                    <td className="px-4 py-3 text-slate-400 whitespace-nowrap text-xs">{formatDate(t.created_at)}</td>
-                    <td className="px-4 py-3 text-center">
-                      {t.payment_method === 'credit' && !t.is_settled ? (
-                        <span className="badge-red text-xs flex items-center gap-1 justify-center">
-                          <Clock className="w-3 h-3" /> Crédit
-                        </span>
-                      ) : t.payment_method === 'credit' ? (
-                        <span className="badge-green text-xs">Crédit soldé</span>
-                      ) : t.payment_method === 'mobile_money' ? (
-                        <span className="badge-blue text-xs">Mobile Money</span>
-                      ) : (
-                        <span className="badge-green text-xs">Espèces</span>
-                      )}
-                    </td>
+        {/* ── Onglet Historique ── */}
+        {activeTab === 'historique' && (
+          loading ? (
+            <div className="flex items-center justify-center py-20 text-slate-500 text-sm">Chargement…</div>
+          ) : trocs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-3 text-slate-500">
+              <ArrowLeftRight className="w-10 h-10 opacity-20" />
+              <p className="text-sm">Aucun troc enregistré</p>
+              <button onClick={() => setShowModal(true)} className="text-xs text-neon-violet hover:underline">
+                Enregistrer le premier troc →
+              </button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-dark-600">
+                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">N° Troc</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Client</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Donné</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Repris</th>
+                    <th className="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Complément</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide whitespace-nowrap">Date</th>
+                    <th className="text-center px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Statut</th>
+                    <th className="px-4 py-3" />
                   </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t border-dark-600 bg-dark-800/60">
-                  <td colSpan={4} className="px-4 py-3 text-xs font-medium text-slate-400">Total compléments</td>
-                  <td className="px-4 py-3 text-right font-bold text-neon-violet">{fmt(totalComplement)}</td>
-                  <td colSpan={2} />
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-dark-600/50">
+                  {trocs.map((t) => (
+                    <tr key={t.id} className="hover:bg-dark-700/30 transition-colors">
+                      <td className="px-4 py-3 font-mono text-neon-violet text-xs font-semibold">{t.troc_number}</td>
+                      <td className="px-4 py-3">
+                        <p className="text-slate-300 text-sm">{t.client_name ?? <span className="text-slate-600 italic text-xs">Anonyme</span>}</p>
+                        {t.client_phone && <p className="text-xs text-slate-500">{t.client_phone}</p>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          <Smartphone className="w-3.5 h-3.5 text-red-400/60 flex-shrink-0" />
+                          <span className="text-slate-300 text-xs">{t.product_given_name}</span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5 ml-5">{fmt(t.product_given_price)}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          <Smartphone className="w-3.5 h-3.5 text-emerald-400/60 flex-shrink-0" />
+                          <span className="text-slate-300 text-xs">{t.product_received_name}</span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5 ml-5">{fmt(t.product_received_value)}</p>
+                      </td>
+                      <td className="px-4 py-3 text-right font-bold text-neon-violet">{fmt(t.complement)}</td>
+                      <td className="px-4 py-3 text-slate-400 whitespace-nowrap text-xs">{formatDate(t.created_at)}</td>
+                      <td className="px-4 py-3 text-center">
+                        {t.payment_method === 'credit' && !t.is_settled ? (
+                          <span className="badge-red text-xs flex items-center gap-1 justify-center">
+                            <Clock className="w-3 h-3" /> Crédit
+                          </span>
+                        ) : t.payment_method === 'credit' ? (
+                          <span className="badge-green text-xs">Crédit soldé</span>
+                        ) : t.payment_method === 'mobile_money' ? (
+                          <span className="badge-blue text-xs">Mobile Money</span>
+                        ) : (
+                          <span className="badge-green text-xs">Espèces</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => printTrocReceipt({
+                            troc_number:            t.troc_number,
+                            created_at:             t.created_at,
+                            client_name:            t.client_name,
+                            client_phone:           t.client_phone,
+                            product_given_name:     t.product_given_name,
+                            product_given_price:    t.product_given_price,
+                            product_received_name:  t.product_received_name,
+                            product_received_value: t.product_received_value,
+                            complement:             t.complement,
+                            payment_method:         PAYMENT_LABELS[t.payment_method] ?? t.payment_method,
+                            notes:                  t.notes,
+                          })}
+                          title="Imprimer le reçu"
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-dark-600 transition-all"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-dark-600 bg-dark-800/60">
+                    <td colSpan={4} className="px-4 py-3 text-xs font-medium text-slate-400">Total compléments</td>
+                    <td className="px-4 py-3 text-right font-bold text-neon-violet">{fmt(totalComplement)}</td>
+                    <td colSpan={3} />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )
+        )}
+
+        {/* ── Onglet Reprises en stock ── */}
+        {activeTab === 'reprises' && (
+          loading ? (
+            <div className="flex items-center justify-center py-20 text-slate-500 text-sm">Chargement…</div>
+          ) : reprises.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-3 text-slate-500">
+              <Package className="w-10 h-10 opacity-20" />
+              <p className="text-sm">Aucune reprise en stock pour l'instant</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-dark-600">
+                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Téléphone repris</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Référence</th>
+                    <th className="text-center px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Qté</th>
+                    <th className="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Valeur reprise</th>
+                    <th className="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Prix de revente</th>
+                    <th className="text-center px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Statut</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-dark-600/50">
+                  {reprises.map((p) => (
+                    <tr key={p.id} className="hover:bg-dark-700/30 transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <Smartphone className="w-3.5 h-3.5 text-emerald-400/60 flex-shrink-0" />
+                          <span className="text-slate-200 font-medium text-sm">{p.name}</span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5 ml-5 italic">{p.description}</p>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs text-slate-400">{p.reference}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={cn(
+                          'font-bold text-sm',
+                          p.stock_qty === 0 ? 'text-red-400' : 'text-emerald-400'
+                        )}>{p.stock_qty}</span>
+                      </td>
+                      <td className="px-4 py-3 text-right text-slate-300">{fmt(p.buy_price)}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-white">{fmt(p.sell_price)}</td>
+                      <td className="px-4 py-3 text-center">
+                        {p.stock_qty === 0
+                          ? <span className="badge-red text-xs">Vendu</span>
+                          : <span className="badge-green text-xs">En stock</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-dark-600 bg-dark-800/60">
+                    <td colSpan={3} className="px-4 py-3 text-xs font-medium text-slate-400">
+                      {reprises.length} téléphone(s) repris · {reprises.filter(p => p.stock_qty > 0).length} encore en stock
+                    </td>
+                    <td className="px-4 py-3 text-right font-bold text-emerald-400">
+                      {fmt(reprises.reduce((s, p) => s + p.buy_price, 0))}
+                    </td>
+                    <td colSpan={2} />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )
         )}
       </div>
 

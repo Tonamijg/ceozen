@@ -3,13 +3,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { formatCFA, formatDate, cn } from '@/lib/utils';
+import { printSaleReceipt } from '@/lib/print';
 import type { Product, VSale, Client, SaleItem } from '@/types';
 import { PAYMENT_LABELS, PAYMENT_BADGE_CLASS } from '@/types';
 import type { PaymentMethod } from '@/types';
 import {
   Plus, X, Loader2, ShoppingCart, Search,
   ChevronDown, Trash2, CheckCircle2, AlertCircle,
-  UserPlus, RotateCcw, FileX, Eye, Minus
+  UserPlus, RotateCcw, FileX, Eye, Minus, Printer
 } from 'lucide-react';
 
 interface AvoirRow {
@@ -669,9 +670,46 @@ export default function VentesPage() {
                   {detailSale.client_name && ` · ${detailSale.client_name}`}
                 </p>
               </div>
-              <button onClick={() => setShowDetail(false)} className="text-slate-500 hover:text-slate-200">
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    if (!loadingDetail) {
+                      printSaleReceipt({
+                        sale_number:    detailSale.sale_number,
+                        created_at:     detailSale.created_at,
+                        client_name:    detailSale.client_name,
+                        seller_name:    detailSale.seller_name,
+                        payment_method: PAYMENT_LABELS[detailSale.payment_method],
+                        subtotal:       detailSale.subtotal,
+                        discount:       detailSale.discount,
+                        total:          detailSale.total,
+                        notes:          detailSale.notes,
+                        items: detailItems.map(item => {
+                          const prod = Array.isArray(item.product) ? item.product[0] : item.product as { name?: string; reference?: string } | undefined;
+                          return {
+                            name:       prod?.name ?? '—',
+                            reference:  prod?.reference,
+                            qty:        item.qty,
+                            unit_price: item.unit_price,
+                            discount:   item.discount,
+                          };
+                        }),
+                      });
+                    }
+                  }}
+                  disabled={loadingDetail}
+                  title="Imprimer le reçu"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                             bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white
+                             disabled:opacity-40 transition-all"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  Reçu
+                </button>
+                <button onClick={() => setShowDetail(false)} className="text-slate-500 hover:text-slate-200">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Articles */}
