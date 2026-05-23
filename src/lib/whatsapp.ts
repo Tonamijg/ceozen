@@ -1,15 +1,20 @@
 // ============================================================
-// CEOZEN — WhatsApp Cloud API (Meta) — Token permanent
+// CEOZEN — WhatsApp Cloud API (Meta) — Templates approuvés
 // ============================================================
 // Variables d'environnement requises dans .env.local :
-//   WHATSAPP_TOKEN        → System User Token permanent (Meta Business)
-//   WHATSAPP_PHONE_ID     → Phone Number ID (dashboard Meta for Developers)
-//   WHATSAPP_RECIPIENT    → Numéro destinataire avec indicatif (+22962369645)
+//   WHATSAPP_TOKEN        → System User Token permanent
+//   WHATSAPP_PHONE_ID     → Phone Number ID
+//   WHATSAPP_RECIPIENT    → Numéro destinataire (+22962369645)
 // ============================================================
 
 const WA_API_URL = 'https://graph.facebook.com/v19.0';
 
-async function sendWhatsApp(message: string): Promise<boolean> {
+// ── Fonction interne : envoyer un template ────────────────────────────────────
+
+async function sendTemplate(
+  templateName: string,
+  params: string[]
+): Promise<boolean> {
   const token     = process.env.WHATSAPP_TOKEN;
   const phoneId   = process.env.WHATSAPP_PHONE_ID;
   const recipient = process.env.WHATSAPP_RECIPIENT;
@@ -18,6 +23,8 @@ async function sendWhatsApp(message: string): Promise<boolean> {
     console.warn('[WhatsApp] Variables d\'environnement manquantes — notification ignorée');
     return false;
   }
+
+  const parameters = params.map((text) => ({ type: 'text', text }));
 
   try {
     const res = await fetch(`${WA_API_URL}/${phoneId}/messages`, {
@@ -29,8 +36,17 @@ async function sendWhatsApp(message: string): Promise<boolean> {
       body: JSON.stringify({
         messaging_product: 'whatsapp',
         to:                recipient,
-        type:              'text',
-        text:              { body: message },
+        type:              'template',
+        template: {
+          name:     templateName,
+          language: { code: 'fr' },
+          components: [
+            {
+              type:       'body',
+              parameters,
+            },
+          ],
+        },
       }),
     });
 
@@ -47,18 +63,13 @@ async function sendWhatsApp(message: string): Promise<boolean> {
   }
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 function fmt(n: number) {
-  return new Intl.NumberFormat('fr-FR').format(Math.round(n)) + ' FCFA';
+  return new Intl.NumberFormat('fr-FR').format(Math.round(n));
 }
 
-function now() {
-  return new Date().toLocaleString('fr-FR', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
-}
-
-// ── Messages métier ───────────────────────────────────────────────────────────
+// ── Notifications métier ──────────────────────────────────────────────────────
 
 export async function notifyVente(data: {
   sale_number: string;
@@ -68,17 +79,14 @@ export async function notifyVente(data: {
   seller_name: string;
   items_count: number;
 }) {
-  const msg =
-    `🛒 *NOUVELLE VENTE — CEOZEN*\n` +
-    `━━━━━━━━━━━━━━━━━━\n` +
-    `📋 N° : *${data.sale_number}*\n` +
-    `👤 Client : ${data.client_name ?? 'Anonyme'}\n` +
-    `🛍️ Articles : ${data.items_count}\n` +
-    `💳 Paiement : ${data.payment_method}\n` +
-    `💰 *Total : ${fmt(data.total)}*\n` +
-    `👨‍💼 Vendeur : ${data.seller_name}\n` +
-    `🕐 ${now()}`;
-  return sendWhatsApp(msg);
+  return sendTemplate('ceozen_vente', [
+    data.sale_number,
+    data.client_name ?? 'Anonyme',
+    String(data.items_count),
+    data.payment_method,
+    fmt(data.total),
+    data.seller_name,
+  ]);
 }
 
 export async function notifyAvoir(data: {
@@ -88,16 +96,13 @@ export async function notifyAvoir(data: {
   total: number;
   reason: string;
 }) {
-  const msg =
-    `🔄 *AVOIR CRÉÉ — CEOZEN*\n` +
-    `━━━━━━━━━━━━━━━━━━\n` +
-    `📋 N° Avoir : *${data.avoir_number}*\n` +
-    `🔗 Vente : ${data.sale_number}\n` +
-    `👤 Client : ${data.client_name ?? 'Anonyme'}\n` +
-    `💬 Motif : ${data.reason}\n` +
-    `💰 *Remboursement : -${fmt(data.total)}*\n` +
-    `🕐 ${now()}`;
-  return sendWhatsApp(msg);
+  return sendTemplate('ceozen_avoir', [
+    data.avoir_number,
+    data.sale_number,
+    data.client_name ?? 'Anonyme',
+    data.reason,
+    fmt(data.total),
+  ]);
 }
 
 export async function notifyDepense(data: {
@@ -106,47 +111,12 @@ export async function notifyDepense(data: {
   category: string;
   payment_method: string;
 }) {
-  const msg =
-    `💸 *DÉPENSE ENREGISTRÉE — CEOZEN*\n` +
-    `━━━━━━━━━━━━━━━━━━\n` +
-    `📝 : ${data.description}\n` +
-    `🏷️ Catégorie : ${data.category}\n` +
-    `💳 Paiement : ${data.payment_method}\n` +
-    `💰 *Montant : ${fmt(data.amount)}*\n` +
-    `🕐 ${now()}`;
-  return sendWhatsApp(msg);
-}
-
-export async function notifyEntreeStock(data: {
-  product_name: string;
-  qty: number;
-  new_stock: number;
-}) {
-  const msg =
-    `📦 *ENTRÉE EN STOCK — CEOZEN*\n` +
-    `━━━━━━━━━━━━━━━━━━\n` +
-    `📱 Produit : *${data.product_name}*\n` +
-    `➕ Quantité ajoutée : ${data.qty}\n` +
-    `📊 Stock total : ${data.new_stock} unité(s)\n` +
-    `🕐 ${now()}`;
-  return sendWhatsApp(msg);
-}
-
-export async function notifySortieStock(data: {
-  product_name: string;
-  qty: number;
-  new_stock: number;
-  is_low_stock: boolean;
-}) {
-  const alerte = data.is_low_stock ? '\n⚠️ *STOCK FAIBLE — Penser à réapprovisionner !*' : '';
-  const msg =
-    `📤 *SORTIE DE STOCK — CEOZEN*\n` +
-    `━━━━━━━━━━━━━━━━━━\n` +
-    `📱 Produit : *${data.product_name}*\n` +
-    `➖ Quantité sortie : ${data.qty}\n` +
-    `📊 Stock restant : ${data.new_stock} unité(s)` +
-    alerte + `\n🕐 ${now()}`;
-  return sendWhatsApp(msg);
+  return sendTemplate('ceozen_depense', [
+    data.description,
+    data.category,
+    data.payment_method,
+    fmt(data.amount),
+  ]);
 }
 
 export async function notifyTroc(data: {
@@ -157,17 +127,49 @@ export async function notifyTroc(data: {
   complement: number;
   payment_method: string;
 }) {
-  const msg =
-    `🔁 *TROC ENREGISTRÉ — CEOZEN*\n` +
-    `━━━━━━━━━━━━━━━━━━\n` +
-    `📋 N° : *${data.troc_number}*\n` +
-    `👤 Client : ${data.client_name ?? 'Anonyme'}\n` +
-    `📤 Donné : ${data.product_given}\n` +
-    `📥 Repris : ${data.product_received}\n` +
-    `💳 Paiement : ${data.payment_method}\n` +
-    `💰 *Complément : ${fmt(data.complement)}*\n` +
-    `🕐 ${now()}`;
-  return sendWhatsApp(msg);
+  return sendTemplate('ceozen_troc', [
+    data.troc_number,
+    data.client_name ?? 'Anonyme',
+    data.product_given,
+    data.product_received,
+    fmt(data.complement),
+    data.payment_method,
+  ]);
+}
+
+export async function notifyEntreeStock(data: {
+  product_name: string;
+  qty: number;
+  new_stock: number;
+}) {
+  // Réutilise le template dépense pour les mouvements de stock
+  return sendTemplate('ceozen_depense', [
+    `Entree stock : ${data.product_name}`,
+    'Stock',
+    `+${data.qty} unites`,
+    String(data.new_stock),
+  ]);
+}
+
+export async function notifySortieStock(data: {
+  product_name: string;
+  qty: number;
+  new_stock: number;
+  is_low_stock: boolean;
+}) {
+  if (data.is_low_stock) {
+    return sendTemplate('ceozen_alerte_stock', [
+      data.product_name,
+      String(data.new_stock),
+      'Seuil atteint',
+    ]);
+  }
+  return sendTemplate('ceozen_depense', [
+    `Sortie stock : ${data.product_name}`,
+    'Stock',
+    `-${data.qty} unites`,
+    String(data.new_stock),
+  ]);
 }
 
 export async function notifyAlertStock(data: {
@@ -175,13 +177,9 @@ export async function notifyAlertStock(data: {
   stock_qty: number;
   stock_min: number;
 }) {
-  const msg =
-    `⚠️ *ALERTE STOCK FAIBLE — CEOZEN*\n` +
-    `━━━━━━━━━━━━━━━━━━\n` +
-    `📱 Produit : *${data.product_name}*\n` +
-    `📊 Stock actuel : *${data.stock_qty}* unité(s)\n` +
-    `🔴 Seuil minimum : ${data.stock_min}\n` +
-    `👉 Penser à réapprovisionner !\n` +
-    `🕐 ${now()}`;
-  return sendWhatsApp(msg);
+  return sendTemplate('ceozen_alerte_stock', [
+    data.product_name,
+    String(data.stock_qty),
+    String(data.stock_min),
+  ]);
 }
