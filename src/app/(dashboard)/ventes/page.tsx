@@ -197,6 +197,25 @@ export default function VentesPage() {
       }))
     );
 
+    // Notification WhatsApp
+    const { data: { user: seller } } = await supabase.auth.getUser();
+    const sellerProfile = seller ? await supabase.from('profiles').select('full_name').eq('id', seller.id).single() : null;
+    fetch('/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'vente',
+        data: {
+          sale_number:    sale.id,
+          client_name:    clientName || undefined,
+          total,
+          payment_method: PAYMENT_LABELS[paymentMethod],
+          seller_name:    sellerProfile?.data?.full_name ?? 'Vendeur',
+          items_count:    lines.length,
+        },
+      }),
+    }).catch(() => {});
+
     setSaving(false);
     setSuccess('Vente enregistrée avec succès !');
     setTimeout(() => setSuccess(''), 3000);
@@ -245,6 +264,22 @@ export default function VentesPage() {
         }))
       );
     }
+
+    // Notification WhatsApp
+    fetch('/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'avoir',
+        data: {
+          avoir_number: `AV-${Date.now()}`,
+          sale_number:  avoirSale.sale_number,
+          client_name:  avoirSale.client_name ?? undefined,
+          total:        avoirSale.total,
+          reason:       avoirReason.trim(),
+        },
+      }),
+    }).catch(() => {});
 
     setAvoirSaving(false);
     setShowAvoir(false);

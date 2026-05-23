@@ -155,6 +155,21 @@ export default function DepensesPage() {
       );
     }
 
+    // Notification WhatsApp
+    fetch('/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'depense',
+        data: {
+          description:    description.trim(),
+          amount:         finalAmount,
+          category:       categoryName ?? 'Sans catégorie',
+          payment_method: paymentMethod,
+        },
+      }),
+    }).catch(() => {});
+
     setSaving(false);
     setSuccess(true);
     setTimeout(() => setSuccess(false), 3000);

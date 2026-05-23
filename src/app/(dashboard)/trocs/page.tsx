@@ -145,6 +145,23 @@ export default function TrocsPage() {
         notes:                 notes || null,
       });
 
+      // Notification WhatsApp
+      fetch('/api/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'troc',
+          data: {
+            troc_number:      trocNumber,
+            client_name:      clientName || undefined,
+            product_given:    selectedProd.name,
+            product_received: receivedName,
+            complement,
+            payment_method:   paymentMethod,
+          },
+        }),
+      }).catch(() => {});
+
       setShowModal(false);
       resetForm();
       loadData();
