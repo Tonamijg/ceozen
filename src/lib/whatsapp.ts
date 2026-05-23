@@ -1,10 +1,10 @@
 // ============================================================
-// CEOZEN — WhatsApp Cloud API (Meta)
+// CEOZEN — WhatsApp Cloud API (Meta) — Token permanent
 // ============================================================
 // Variables d'environnement requises dans .env.local :
-//   WHATSAPP_TOKEN        → Access Token Meta (commence par EAAJ...)
-//   WHATSAPP_PHONE_ID     → Phone Number ID (15-16 chiffres)
-//   WHATSAPP_RECIPIENT    → Ton numéro WhatsApp (+225XXXXXXXX)
+//   WHATSAPP_TOKEN        → System User Token permanent (Meta Business)
+//   WHATSAPP_PHONE_ID     → Phone Number ID (dashboard Meta for Developers)
+//   WHATSAPP_RECIPIENT    → Numéro destinataire avec indicatif (+22962369645)
 // ============================================================
 
 const WA_API_URL = 'https://graph.facebook.com/v19.0';
@@ -34,11 +34,12 @@ async function sendWhatsApp(message: string): Promise<boolean> {
       }),
     });
 
+    const json = await res.json();
     if (!res.ok) {
-      const err = await res.json();
-      console.error('[WhatsApp] Erreur API:', err);
+      console.error('[WhatsApp] Erreur API Meta:', JSON.stringify(json));
       return false;
     }
+    console.log('[WhatsApp] Succès Meta:', JSON.stringify(json));
     return true;
   } catch (e) {
     console.error('[WhatsApp] Erreur réseau:', e);
