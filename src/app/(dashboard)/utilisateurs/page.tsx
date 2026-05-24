@@ -6,7 +6,7 @@ import { cn, formatDateTime } from '@/lib/utils';
 import type { Profile } from '@/types';
 import {
   Users, Shield, UserCheck, UserX, Loader2,
-  CheckCircle2, Edit2, ChevronDown
+  CheckCircle2, Edit2, ChevronDown, UserPlus, X, Eye, EyeOff
 } from 'lucide-react';
 
 type UserRole = 'admin' | 'collaborateur';
@@ -21,6 +21,13 @@ export default function UtilisateursPage() {
   const [newRole,    setNewRole]    = useState<UserRole>('collaborateur');
   const [saving,     setSaving]     = useState(false);
   const [success,    setSuccess]    = useState('');
+
+  // Modal création utilisateur
+  const [showModal,  setShowModal]  = useState(false);
+  const [formData,   setFormData]   = useState({ full_name: '', email: '', password: '', phone: '', role: 'collaborateur' as UserRole });
+  const [showPwd,    setShowPwd]    = useState(false);
+  const [creating,   setCreating]   = useState(false);
+  const [createErr,  setCreateErr]  = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -51,11 +58,120 @@ export default function UtilisateursPage() {
     load();
   }
 
+  async function handleCreateUser(e: React.FormEvent) {
+    e.preventDefault();
+    setCreating(true);
+    setCreateErr('');
+    try {
+      const res = await fetch('/api/admin/create-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+      const json = await res.json();
+      if (!res.ok) { setCreateErr(json.error ?? 'Erreur inconnue'); setCreating(false); return; }
+      setShowModal(false);
+      setFormData({ full_name: '', email: '', password: '', phone: '', role: 'collaborateur' });
+      setSuccess('Utilisateur créé avec succès !');
+      setTimeout(() => setSuccess(''), 4000);
+      load();
+    } catch {
+      setCreateErr('Erreur réseau. Réessaie.');
+    }
+    setCreating(false);
+  }
+
   const admins        = profiles.filter((p) => p.role === 'admin');
   const collaborateurs = profiles.filter((p) => p.role === 'collaborateur');
 
   return (
     <div className="space-y-6 max-w-3xl">
+
+      {/* ── Modal création utilisateur ── */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="card w-full max-w-md p-6 space-y-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-white">Nouvel utilisateur</h2>
+              <button onClick={() => { setShowModal(false); setCreateErr(''); }} className="text-slate-500 hover:text-slate-200 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateUser} className="space-y-4">
+              {/* Nom */}
+              <div>
+                <label className="label">Nom complet *</label>
+                <input className="input" placeholder="Jean Dupont" required
+                  value={formData.full_name}
+                  onChange={(e) => setFormData({ ...formData, full_name: e.target.value })} />
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="label">Adresse email *</label>
+                <input className="input" type="email" placeholder="jean@boutique.com" required
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
+              </div>
+
+              {/* Mot de passe */}
+              <div>
+                <label className="label">Mot de passe *</label>
+                <div className="relative">
+                  <input className="input pr-11" type={showPwd ? 'text' : 'password'}
+                    placeholder="Min. 6 caractères" required minLength={6}
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })} />
+                  <button type="button" onClick={() => setShowPwd(!showPwd)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">
+                    {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Téléphone */}
+              <div>
+                <label className="label">Téléphone <span className="text-slate-600">(optionnel)</span></label>
+                <input className="input" placeholder="+229 00 00 00 00"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })} />
+              </div>
+
+              {/* Rôle */}
+              <div>
+                <label className="label">Rôle *</label>
+                <div className="relative">
+                  <select className="input appearance-none pr-8"
+                    value={formData.role}
+                    onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole })}>
+                    <option value="collaborateur">Collaborateur</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Erreur */}
+              {createErr && (
+                <p className="text-sm text-red-400 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20">
+                  {createErr}
+                </p>
+              )}
+
+              <div className="flex gap-3 pt-1">
+                <button type="submit" disabled={creating} className="btn-primary flex-1 py-2.5">
+                  {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Créer le compte'}
+                </button>
+                <button type="button" onClick={() => { setShowModal(false); setCreateErr(''); }}
+                  className="btn-secondary py-2.5 px-4">
+                  Annuler
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       {success && (
         <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300">
           <CheckCircle2 className="w-5 h-5" />
@@ -84,7 +200,14 @@ export default function UtilisateursPage() {
       <div className="card overflow-hidden">
         <div className="px-5 py-4 border-b border-dark-600 flex items-center justify-between">
           <h3 className="font-semibold text-slate-200">Liste des utilisateurs</h3>
-          <p className="text-xs text-slate-500">{profiles.length} compte(s)</p>
+          <div className="flex items-center gap-3">
+            <p className="text-xs text-slate-500">{profiles.length} compte(s)</p>
+            <button onClick={() => { setShowModal(true); setCreateErr(''); }}
+              className="btn-primary py-1.5 px-3 text-xs flex items-center gap-1.5">
+              <UserPlus className="w-3.5 h-3.5" />
+              Ajouter
+            </button>
+          </div>
         </div>
 
         <div className="divide-y divide-dark-600">
@@ -200,9 +323,9 @@ export default function UtilisateursPage() {
           <div>
             <p className="text-sm font-semibold text-slate-200">Gestion des accès</p>
             <p className="text-xs text-slate-500 mt-1">
-              Pour créer un nouvel utilisateur, invitez-le depuis le Dashboard Supabase (Authentication → Users → Invite user).
-              Le compte sera créé automatiquement avec le rôle &quot;Collaborateur&quot; par défaut.
-              Vous pouvez ensuite modifier le rôle depuis cette page.
+              Les comptes créés sont actifs immédiatement — aucune vérification email requise.
+              Le collaborateur peut se connecter directement avec l&apos;email et le mot de passe définis.
+              Tu peux modifier le rôle ou désactiver un compte à tout moment.
             </p>
           </div>
         </div>
