@@ -14,6 +14,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { type, data } = body;
 
+    console.log('[/api/notify] Reçu :', type);
+    console.log('[/api/notify] ENV RESEND_API_KEY:', process.env.RESEND_API_KEY ? '✅ présent' : '❌ ABSENT');
+    console.log('[/api/notify] ENV NOTIFY_EMAIL:', process.env.NOTIFY_EMAIL ?? '❌ ABSENT');
+
     let ok = false;
     switch (type) {
       case 'vente':         ok = await notifyVente(data);        break;
