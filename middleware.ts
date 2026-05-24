@@ -30,8 +30,8 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  // Routes publiques
-  const publicRoutes = ['/login'];
+  // Routes publiques (auth non requise)
+  const publicRoutes = ['/login', '/manifest.webmanifest', '/api/pwa-icon', '/sw.js', '/icon.svg', '/senselab-logo.svg'];
   const isPublicRoute = publicRoutes.some((r) => pathname.startsWith(r));
 
   // Redirige vers /login si non connecté
