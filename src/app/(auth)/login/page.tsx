@@ -72,7 +72,7 @@ export default function LoginPage() {
             </span>
           </div>
           <p className="mt-3 text-slate-400 text-sm font-medium">
-            Vendez. Gérez. Grandissez.
+            Sell. Manage. Grow.
           </p>
         </div>
 
@@ -139,7 +139,7 @@ export default function LoginPage() {
                 <span className="text-white font-light">ZEN</span>
               </span>
             </div>
-            <p className="text-xs text-slate-500 mb-4">Vendez. Gérez. Grandissez.</p>
+            <p className="text-xs text-slate-500 mb-4">Sell. Manage. Grow.</p>
           </div>
 
           {/* Card formulaire */}
