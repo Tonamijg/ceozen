@@ -8,7 +8,6 @@ export const metadata: Metadata = {
     template: '%s | CEOZEN',
   },
   description: 'Vendez. Gérez. Grandissez. La solution de gestion pour votre boutique de téléphones — by SenseLab.',
-  manifest: '/manifest.json',
   icons: {
     icon: '/icon.svg',
     apple: '/icon.svg',
