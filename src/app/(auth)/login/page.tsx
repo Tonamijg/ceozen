@@ -116,8 +116,8 @@ export default function LoginPage() {
         {/* Footer */}
         <div className="relative z-10 space-y-3">
           {/* SenseLab logo */}
-          <div className="flex items-center gap-2 opacity-40 hover:opacity-70 transition-opacity">
-            <img src="/senselab-logo.svg" alt="SenseLab" className="h-5 w-auto invert brightness-200" />
+          <div className="flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity">
+            <img src="/senselab-logo.svg" alt="SenseLab" className="h-10 w-auto invert brightness-200" />
           </div>
           <p className="text-xs text-slate-600">
             © {new Date().getFullYear()} CEOZEN by SenseLab — Afrique de l&apos;Ouest
