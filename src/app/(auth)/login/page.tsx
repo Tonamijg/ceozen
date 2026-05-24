@@ -66,10 +66,13 @@ export default function LoginPage() {
             <div className="w-10 h-10 rounded-xl bg-neon-blue/20 border border-neon-blue/30 flex items-center justify-center">
               <Smartphone className="w-5 h-5 text-neon-blue" />
             </div>
-            <span className="text-2xl font-bold gradient-text">CEOZEN</span>
+            <span className="text-3xl font-black tracking-tight">
+              <span className="gradient-text">CEO</span>
+              <span className="text-white font-light">ZEN</span>
+            </span>
           </div>
-          <p className="mt-3 text-slate-500 text-sm">
-            Plateforme de gestion boutique tech
+          <p className="mt-3 text-slate-400 text-sm font-medium">
+            Vendez. Gérez. Grandissez.
           </p>
         </div>
 
@@ -111,9 +114,15 @@ export default function LoginPage() {
         </div>
 
         {/* Footer */}
-        <p className="relative z-10 text-xs text-slate-600">
-          © {new Date().getFullYear()} CEOZEN — Afrique de l&apos;Ouest
-        </p>
+        <div className="relative z-10 space-y-3">
+          {/* SenseLab logo */}
+          <div className="flex items-center gap-2 opacity-40 hover:opacity-70 transition-opacity">
+            <img src="/senselab-logo.svg" alt="SenseLab" className="h-5 w-auto invert brightness-200" />
+          </div>
+          <p className="text-xs text-slate-600">
+            © {new Date().getFullYear()} CEOZEN by SenseLab — Afrique de l&apos;Ouest
+          </p>
+        </div>
       </div>
 
       {/* ---- Panneau droit (formulaire) ---- */}
@@ -121,12 +130,16 @@ export default function LoginPage() {
         <div className="w-full max-w-md space-y-8">
           {/* Header mobile */}
           <div className="lg:hidden text-center">
-            <div className="inline-flex items-center gap-2 mb-4">
+            <div className="inline-flex items-center gap-2 mb-2">
               <div className="w-8 h-8 rounded-lg bg-neon-blue/20 border border-neon-blue/30 flex items-center justify-center">
                 <Smartphone className="w-4 h-4 text-neon-blue" />
               </div>
-              <span className="text-xl font-bold gradient-text">CEOZEN</span>
+              <span className="text-2xl font-black tracking-tight">
+                <span className="gradient-text">CEO</span>
+                <span className="text-white font-light">ZEN</span>
+              </span>
             </div>
+            <p className="text-xs text-slate-500 mb-4">Vendez. Gérez. Grandissez.</p>
           </div>
 
           {/* Card formulaire */}

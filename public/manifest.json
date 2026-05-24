@@ -1,0 +1,24 @@
+{
+  "name": "CEOZEN — Gestion boutique",
+  "short_name": "CEOZEN",
+  "description": "Vendez. Gérez. Grandissez. La solution de gestion pour votre boutique de téléphones.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#050816",
+  "theme_color": "#00d4ff",
+  "lang": "fr",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "related_applications": [],
+  "prefer_related_applications": false
+}

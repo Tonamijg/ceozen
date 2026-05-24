@@ -107,12 +107,15 @@ export default function Sidebar({ profile, onClose, isOpen, onSignOut }: Sidebar
         {/* Logo */}
         <div className="flex items-center justify-between px-5 h-16 border-b border-dark-600">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-neon-blue/20 border border-neon-blue/30 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-neon-blue/20 border border-neon-blue/30 flex items-center justify-center flex-shrink-0">
               <Smartphone className="w-4 h-4 text-neon-blue" />
             </div>
             <div>
-              <span className="font-bold text-sm gradient-text leading-none block">CEOZEN</span>
-              <span className="text-[10px] text-slate-500 leading-none">by Tech big</span>
+              <span className="font-bold text-sm leading-none block">
+                <span className="gradient-text">CEO</span>
+                <span className="text-white font-light">ZEN</span>
+              </span>
+              <span className="text-[10px] text-slate-500 leading-none">by SenseLab</span>
             </div>
           </div>
           {onClose && (
