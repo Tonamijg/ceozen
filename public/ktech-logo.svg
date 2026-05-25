@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 160" width="320" height="160">
+  <!-- K-Tech text -->
+  <text
+    x="160"
+    y="95"
+    font-family="Arial, Helvetica, sans-serif"
+    font-size="72"
+    font-weight="bold"
+    fill="#F47920"
+    text-anchor="middle"
+    letter-spacing="-2"
+  >K-Tech</text>
+
+  <!-- Swoosh underline -->
+  <path
+    d="M 30 118 Q 160 108 295 122"
+    stroke="#F47920"
+    stroke-width="7"
+    stroke-linecap="round"
+    fill="none"
+  />
+</svg>
