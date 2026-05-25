@@ -20,14 +20,49 @@ const RECEIPT_STYLE = `
   .center { text-align: center; }
   .right  { text-align: right; }
   .bold   { font-weight: bold; }
-  .big    { font-size: 18px; font-weight: bold; letter-spacing: 2px; }
   .small  { font-size: 10px; color: #555; }
   .divider-solid { border-top: 1px solid #000; margin: 8px 0; }
   .divider-dash  { border-top: 1px dashed #000; margin: 8px 0; }
   table { width: 100%; border-collapse: collapse; }
   td, th { padding: 3px 4px; vertical-align: top; }
   .total-row td { font-weight: bold; font-size: 14px; padding-top: 6px; }
-  .footer { margin-top: 16px; text-align: center; font-size: 10px; color: #555; line-height: 1.6; }
+  .footer {
+    margin-top: 12px;
+    text-align: center;
+    font-size: 10px;
+    color: #555;
+    line-height: 1.8;
+    border-top: 1px solid #000;
+    padding-top: 8px;
+  }
+  .header-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .logo-box {
+    width: 64px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 9px;
+    color: #aaa;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .boutique-info {
+    text-align: right;
+    line-height: 1.6;
+  }
+  .boutique-name {
+    font-size: 15px;
+    font-weight: bold;
+    letter-spacing: 1px;
+  }
   @media print {
     @page { margin: 0; size: 80mm auto; }
     body { width: 100%; padding: 4px; }
@@ -90,10 +125,18 @@ export function printSaleReceipt(data: SaleReceiptData) {
   `).join('');
 
   const html = `
-    <div class="center">
-      <div class="big">CEOZEN</div>
-      <div class="small">by Tech big</div>
-      <div class="small" style="margin-top:4px;">${date}</div>
+    <!-- En-tête : Logo gauche + infos boutique droite -->
+    <div class="header-wrap">
+      <div class="logo-box">
+        <img src="/ktech-logo.svg" alt="K-Tech" style="width:56px;height:56px;object-fit:contain;"
+          onerror="this.parentNode.innerHTML='<span>K-TECH</span>'" />
+      </div>
+      <div class="boutique-info">
+        <div class="boutique-name">K-TECH</div>
+        <div class="small">Vente &amp; réparation de téléphones</div>
+        <div class="small">Cotonou, Bénin</div>
+        <div class="small">+229 01 94 17 18 38</div>
+      </div>
     </div>
 
     <div class="divider-solid"></div>
@@ -132,12 +175,10 @@ export function printSaleReceipt(data: SaleReceiptData) {
 
     ${data.notes ? `<div class="divider-dash"></div><div class="small" style="font-style:italic;">${data.notes}</div>` : ''}
 
-    <div class="divider-solid"></div>
-
     <div class="footer">
       Merci pour votre confiance !<br>
-      CEOZEN · by Tech big<br>
-      <span style="font-size:9px;">Conservez ce reçu comme preuve d'achat</span>
+      <span style="font-size:9px;">Conservez ce reçu comme preuve d'achat</span><br>
+      <span style="font-size:9px;color:#999;">Reçu édité par CEOZEN · by SenseLab · ${date}</span>
     </div>
   `;
 
@@ -166,10 +207,18 @@ export function printTrocReceipt(data: TrocReceiptData) {
   });
 
   const html = `
-    <div class="center">
-      <div class="big">CEOZEN</div>
-      <div class="small">by Tech big</div>
-      <div class="small" style="margin-top:4px;">${date}</div>
+    <!-- En-tête : Logo gauche + infos boutique droite -->
+    <div class="header-wrap">
+      <div class="logo-box">
+        <img src="/ktech-logo.svg" alt="K-Tech" style="width:56px;height:56px;object-fit:contain;"
+          onerror="this.parentNode.innerHTML='<span>K-TECH</span>'" />
+      </div>
+      <div class="boutique-info">
+        <div class="boutique-name">K-TECH</div>
+        <div class="small">Vente &amp; réparation de téléphones</div>
+        <div class="small">Cotonou, Bénin</div>
+        <div class="small">+229 01 94 17 18 38</div>
+      </div>
     </div>
 
     <div class="divider-solid"></div>
@@ -185,7 +234,7 @@ export function printTrocReceipt(data: TrocReceiptData) {
     <div class="divider-dash"></div>
 
     <div style="margin-bottom:6px;">
-      <div class="small" style="text-transform:uppercase;font-weight:bold;margin-bottom:4px;">📤 Téléphone remis au client</div>
+      <div class="small" style="text-transform:uppercase;font-weight:bold;margin-bottom:4px;">Téléphone remis au client</div>
       <table>
         <tr>
           <td>${data.product_given_name}</td>
@@ -195,7 +244,7 @@ export function printTrocReceipt(data: TrocReceiptData) {
     </div>
 
     <div>
-      <div class="small" style="text-transform:uppercase;font-weight:bold;margin-bottom:4px;">📥 Téléphone repris au client</div>
+      <div class="small" style="text-transform:uppercase;font-weight:bold;margin-bottom:4px;">Téléphone repris au client</div>
       <table>
         <tr>
           <td>${data.product_received_name}</td>
@@ -216,12 +265,10 @@ export function printTrocReceipt(data: TrocReceiptData) {
 
     ${data.notes ? `<div class="divider-dash"></div><div class="small" style="font-style:italic;">${data.notes}</div>` : ''}
 
-    <div class="divider-solid"></div>
-
     <div class="footer">
       Merci pour votre confiance !<br>
-      CEOZEN · by Tech big<br>
-      <span style="font-size:9px;">Les deux parties reconnaissent cet échange</span>
+      <span style="font-size:9px;">Les deux parties reconnaissent cet échange</span><br>
+      <span style="font-size:9px;color:#999;">Reçu édité par CEOZEN · by SenseLab · ${date}</span>
     </div>
   `;
 
