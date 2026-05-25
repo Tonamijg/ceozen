@@ -27,16 +27,22 @@ async function sendEmail(subject: string, html: string): Promise<boolean> {
   const extras = process.env.NOTIFY_EMAIL_CC
     ? process.env.NOTIFY_EMAIL_CC.split(',').map(e => e.trim()).filter(Boolean)
     : [];
-  const to = [primary, ...extras];
+  const recipients = [primary, ...extras];
 
   try {
     const resend = getResend();
-    const { error } = await resend.emails.send({
-      from: 'CEOZEN <onboarding@resend.dev>',
-      to,
-      subject,
-      html,
-    });
+    // Envoie un email séparé à chaque destinataire (compatibilité plan gratuit Resend)
+    const results = await Promise.all(
+      recipients.map(to =>
+        resend.emails.send({
+          from: 'CEOZEN <onboarding@resend.dev>',
+          to,
+          subject,
+          html,
+        })
+      )
+    );
+    const error = results.find(r => r.error)?.error;
 
     if (error) {
       console.error('[Notify] Erreur Resend:', error);
