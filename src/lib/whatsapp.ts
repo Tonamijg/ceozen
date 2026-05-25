@@ -17,11 +17,17 @@ function fmt(n: number) {
 }
 
 async function sendEmail(subject: string, html: string): Promise<boolean> {
-  const to = process.env.NOTIFY_EMAIL;
-  if (!process.env.RESEND_API_KEY || !to) {
+  const primary = process.env.NOTIFY_EMAIL;
+  if (!process.env.RESEND_API_KEY || !primary) {
     console.warn('[Notify] Variables d\'environnement manquantes — notification ignorée');
     return false;
   }
+
+  // Destinataires : NOTIFY_EMAIL + NOTIFY_EMAIL_CC (optionnel, séparés par virgule)
+  const extras = process.env.NOTIFY_EMAIL_CC
+    ? process.env.NOTIFY_EMAIL_CC.split(',').map(e => e.trim()).filter(Boolean)
+    : [];
+  const to = [primary, ...extras];
 
   try {
     const resend = getResend();
