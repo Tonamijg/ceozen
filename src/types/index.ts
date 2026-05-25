@@ -32,6 +32,14 @@ export interface Client {
   updated_at: string;
 }
 
+// ---------- Fournisseur ----------
+export interface Supplier {
+  id: string;
+  name: string;
+  phone?: string;
+  created_at: string;
+}
+
 // ---------- Catégorie produit ----------
 export interface ProductCategory {
   id: string;

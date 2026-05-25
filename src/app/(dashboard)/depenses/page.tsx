@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { formatCFA, formatDate, cn } from '@/lib/utils';
-import type { Expense, ExpenseCategory, Product } from '@/types';
+import type { Expense, ExpenseCategory, Product, Supplier } from '@/types';
 import { PAYMENT_LABELS, PAYMENT_BADGE_CLASS, REAPPRO_CATEGORY } from '@/types';
 import type { PaymentMethod } from '@/types';
 import {
@@ -44,8 +44,11 @@ export default function DepensesPage() {
   const [amount,         setAmount]         = useState('');
   const [description,    setDescription]    = useState('');
   const [expenseDate,    setExpenseDate]    = useState(new Date().toISOString().split('T')[0]);
-  const [supplierName,   setSupplierName]   = useState('');
-  const [paymentMethod,  setPaymentMethod]  = useState<PaymentMethod>('especes');
+  const [supplierName,      setSupplierName]      = useState('');
+  const [suppliers,         setSuppliers]         = useState<Supplier[]>([]);
+  const [supplierSearch,    setSupplierSearch]    = useState('');
+  const [showSupplierDrop,  setShowSupplierDrop]  = useState(false);
+  const [paymentMethod,     setPaymentMethod]     = useState<PaymentMethod>('especes');
   const [creditDueDate,  setCreditDueDate]  = useState('');
 
   // Réapprovisionnement
@@ -59,9 +62,11 @@ export default function DepensesPage() {
     Promise.all([
       supabase.from('expense_categories').select('*').order('name'),
       supabase.from('products').select('*, category:product_categories(name)').eq('is_active', true).order('name'),
-    ]).then(([{ data: cats }, { data: prods }]) => {
+      supabase.from('suppliers').select('*').order('name'),
+    ]).then(([{ data: cats }, { data: prods }, { data: sups }]) => {
       setCategories(cats ?? []);
       setProducts((prods as Product[]) ?? []);
+      setSuppliers((sups as Supplier[]) ?? []);
       if (cats?.[0]) { setCategoryId(cats[0].id); setCategoryName(cats[0].name); }
     });
   }, [supabase]);
@@ -143,6 +148,12 @@ export default function DepensesPage() {
       is_settled:     paymentMethod !== 'credit',
       created_by:     user!.id,
     }).select('id').single();
+
+    // Auto-sauvegarder le fournisseur dans la base s'il est nouveau
+    if (supplierName.trim()) {
+      await supabase.from('suppliers')
+        .upsert({ name: supplierName.trim() }, { onConflict: 'name', ignoreDuplicates: true });
+    }
 
     if (!error && expense && isReappro && reapproLines.length > 0) {
       await supabase.from('expense_items').insert(
@@ -261,13 +272,35 @@ export default function DepensesPage() {
             </div>
 
             {/* Fournisseur */}
-            <div>
+            <div className="relative">
               <label className="label">Fournisseur / Bénéficiaire</label>
-              <input type="text" value={supplierName}
-                onChange={(e) => setSupplierName(e.target.value)}
+              <input type="text"
+                value={supplierName}
+                onChange={(e) => { setSupplierName(e.target.value); setSupplierSearch(e.target.value); setShowSupplierDrop(true); }}
+                onFocus={() => setShowSupplierDrop(true)}
+                onBlur={() => setTimeout(() => setShowSupplierDrop(false), 150)}
                 className="input"
                 placeholder="Nom du fournisseur ou bénéficiaire"
+                autoComplete="off"
               />
+              {showSupplierDrop && supplierSearch && (
+                (() => {
+                  const filtered = suppliers.filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase()));
+                  return filtered.length > 0 ? (
+                    <div className="absolute z-20 mt-1 w-full bg-dark-700 border border-dark-600 rounded-xl overflow-hidden shadow-xl max-h-40 overflow-y-auto">
+                      {filtered.slice(0, 6).map(s => (
+                        <button key={s.id} type="button"
+                          onMouseDown={() => { setSupplierName(s.name); setShowSupplierDrop(false); }}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-dark-600 text-left transition-colors"
+                        >
+                          <span className="text-sm text-slate-200">{s.name}</span>
+                          {s.phone && <span className="text-xs text-slate-500 ml-auto">{s.phone}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null;
+                })()
+              )}
             </div>
 
             {/* Mode de règlement */}

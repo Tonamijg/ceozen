@@ -145,6 +145,12 @@ export default function TrocsPage() {
         notes:                 notes || null,
       });
 
+      // Auto-sauvegarder le client dans la base s'il est nouveau
+      if (clientName.trim()) {
+        await supabase.from('clients')
+          .upsert({ name: clientName.trim() }, { onConflict: 'name', ignoreDuplicates: true });
+      }
+
       // Notification WhatsApp
       fetch('/api/notify', {
         method: 'POST',

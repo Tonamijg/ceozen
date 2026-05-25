@@ -57,6 +57,7 @@ export default function VentesPage() {
   const [notes,          setNotes]          = useState('');
   const [saving,         setSaving]         = useState(false);
   const [success,        setSuccess]        = useState('');
+  const [error,          setError]          = useState('');
 
   /* ---- État historique ---- */
   const [sales,          setSales]          = useState<VSale[]>([]);
@@ -130,9 +131,20 @@ export default function VentesPage() {
 
   /* ---- Gestion lignes ---- */
   function addLine(product: Product) {
+    if (product.stock_qty <= 0) {
+      setError(`"${product.name}" est en rupture de stock — vente impossible.`);
+      setTimeout(() => setError(''), 4000);
+      return;
+    }
     setLines(prev => {
       const idx = prev.findIndex(l => l.product.id === product.id);
       if (idx >= 0) {
+        const alreadyInCart = prev[idx].qty;
+        if (alreadyInCart >= product.stock_qty) {
+          setError(`Stock insuffisant — seulement ${product.stock_qty} unité(s) disponible(s).`);
+          setTimeout(() => setError(''), 4000);
+          return prev;
+        }
         const next = [...prev];
         next[idx] = { ...next[idx], qty: next[idx].qty + 1 };
         return next;
@@ -186,6 +198,12 @@ export default function VentesPage() {
     }).select('id').single();
 
     if (error || !sale) { setSaving(false); return; }
+
+    // Auto-sauvegarder le client dans la base s'il est nouveau
+    if (clientName && !clientId) {
+      await supabase.from('clients')
+        .upsert({ name: clientName.trim() }, { onConflict: 'name', ignoreDuplicates: true });
+    }
 
     await supabase.from('sale_items').insert(
       lines.map(l => ({
@@ -326,6 +344,12 @@ export default function VentesPage() {
           {success}
         </div>
       )}
+      {error && (
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-xl bg-red-500/20 border border-red-500/30 text-red-300 shadow-xl">
+          <AlertCircle className="w-5 h-5" />
+          {error}
+        </div>
+      )}
 
       {/* En-tête */}
       <div className="flex items-center justify-between">
@@ -425,14 +449,25 @@ export default function VentesPage() {
             {search && filteredProducts.length > 0 && (
               <div className="mt-2 bg-dark-700 border border-dark-600 rounded-xl overflow-hidden shadow-xl max-h-48 overflow-y-auto">
                 {filteredProducts.slice(0, 8).map(p => (
-                  <button key={p.id} type="button" onClick={() => addLine(p)}
-                    className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-dark-600 transition-colors text-left"
+                  <button key={p.id} type="button"
+                    onClick={() => addLine(p)}
+                    disabled={p.stock_qty <= 0}
+                    className={cn(
+                      "w-full flex items-center justify-between px-4 py-2.5 transition-colors text-left",
+                      p.stock_qty <= 0
+                        ? "opacity-40 cursor-not-allowed bg-dark-800"
+                        : "hover:bg-dark-600"
+                    )}
                   >
                     <div>
                       <p className="text-sm font-medium text-slate-200">{p.name}</p>
-                      <p className="text-xs text-slate-500">{p.reference} · stock: {p.stock_qty}</p>
+                      <p className={cn("text-xs", p.stock_qty <= 0 ? "text-red-400" : "text-slate-500")}>
+                        {p.reference} · stock: {p.stock_qty <= 0 ? "Rupture" : p.stock_qty}
+                      </p>
                     </div>
-                    <span className="text-sm font-semibold text-neon-blue">{formatCFA(p.sell_price)}</span>
+                    <span className={cn("text-sm font-semibold", p.stock_qty <= 0 ? "text-slate-600" : "text-neon-blue")}>
+                      {formatCFA(p.sell_price)}
+                    </span>
                   </button>
                 ))}
               </div>
