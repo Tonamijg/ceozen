@@ -9,8 +9,9 @@ import SalesChart   from '@/components/dashboard/SalesChart';
 import type { DashboardStats, VStockAlert, VSale } from '@/types';
 import {
   TrendingUp, ShoppingBag, Package, AlertTriangle,
-  Wallet, RefreshCw, Calendar
+  Wallet, RefreshCw, Calendar, Banknote, Smartphone, Building2, ArrowRight
 } from 'lucide-react';
+import Link from 'next/link';
 import { formatDateTime } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 
@@ -122,6 +123,7 @@ export default function DashboardClient({
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [pulse,      setPulse]      = useState(false);
   const [loadingP,   setLoadingP]   = useState(false);
+  const [treasury,   setTreasury]   = useState<{ name: string; type: string; solde: number }[]>([]);
 
   // ── Fetches stats for a given period ────────────────────────────────────────
   const fetchPeriodStats = useCallback(async (p: Period) => {
@@ -163,6 +165,32 @@ export default function DashboardClient({
     setAlerts(newAlerts ?? []);
     setSales(newSales ?? []);
     setChart(buildChartData(salesChart ?? [], expensesChart ?? [], chartDays));
+
+    // ── Trésorerie : solde actuel (tout jusqu'à maintenant) ──────────────────
+    const [
+      { data: treasuryAccs },
+      { data: allSales },
+      { data: allExpenses },
+      { data: allApports },
+      { data: allAvoirs },
+    ] = await Promise.all([
+      supabase.from('treasury_accounts').select('id,name,type,payment_keys,initial_balance'),
+      supabase.from('sales').select('total,payment_method').neq('payment_method','credit'),
+      supabase.from('expenses').select('amount,payment_method'),
+      supabase.from('treasury_apports').select('amount,account_id'),
+      supabase.from('sale_avoirs').select('total,sale:sales(payment_method)'),
+    ]);
+
+    const treasuryData = (treasuryAccs ?? []).map((acc: Record<string, unknown>) => {
+      const keys = acc.payment_keys as string[];
+      const salesIn   = (allSales    ?? []).filter((s: Record<string, unknown>) => keys.includes(s.payment_method as string)).reduce((s: number, x: Record<string, unknown>) => s + ((x.total as number) ?? 0), 0);
+      const expOut    = (allExpenses ?? []).filter((e: Record<string, unknown>) => keys.includes(e.payment_method as string)).reduce((s: number, x: Record<string, unknown>) => s + ((x.amount as number) ?? 0), 0);
+      const apportsIn = (allApports  ?? []).filter((a: Record<string, unknown>) => a.account_id === acc.id).reduce((s: number, x: Record<string, unknown>) => s + ((x.amount as number) ?? 0), 0);
+      const avoirsOut = (allAvoirs   ?? []).filter((av: Record<string, unknown>) => { const pm = (av.sale as Record<string, unknown> | null)?.payment_method as string; return pm && keys.includes(pm); }).reduce((s: number, x: Record<string, unknown>) => s + ((x.total as number) ?? 0), 0);
+      return { name: acc.name as string, type: acc.type as string, solde: (acc.initial_balance as number) + salesIn + apportsIn - expOut - avoirsOut };
+    });
+    setTreasury(treasuryData);
+
     setLastUpdate(new Date());
     setPulse(true);
     setTimeout(() => setPulse(false), 600);
@@ -319,6 +347,44 @@ export default function DashboardClient({
           </p>
         </div>
       </div>
+
+      {/* ── Trésorerie ───────────────────────────────────────────────────────── */}
+      {treasury.length > 0 && (
+        <div className="card p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-slate-200 flex items-center gap-2">
+              <Wallet className="w-4 h-4 text-neon-blue" />
+              Disponibilités actuelles
+            </h3>
+            <Link href="/tresorerie" className="flex items-center gap-1 text-xs text-neon-blue hover:underline">
+              Détail <ArrowRight className="w-3 h-3" />
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {treasury.map(t => {
+              const Icon = t.type === 'banque' ? Building2 : t.type === 'mobile_money' ? Smartphone : Banknote;
+              const color = t.type === 'banque' ? 'text-blue-400' : t.type === 'mobile_money' ? 'text-violet-400' : 'text-emerald-400';
+              return (
+                <div key={t.name} className="bg-dark-700 rounded-xl p-4 flex items-center gap-3">
+                  <Icon className={`w-5 h-5 ${color} flex-shrink-0`} />
+                  <div>
+                    <p className="text-xs text-slate-500">{t.name}</p>
+                    <p className={`font-bold text-sm ${t.solde >= 0 ? 'text-white' : 'text-red-400'}`}>
+                      {new Intl.NumberFormat('fr-FR').format(Math.round(t.solde))} FCFA
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-3 pt-3 border-t border-dark-600 flex justify-between items-center">
+            <span className="text-xs text-slate-500">Total disponibilités</span>
+            <span className="font-bold text-neon-blue">
+              {new Intl.NumberFormat('fr-FR').format(Math.round(treasury.reduce((s, t) => s + t.solde, 0)))} FCFA
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* ── Ventes récentes ──────────────────────────────────────────────────── */}
       <div className="min-h-[320px]">

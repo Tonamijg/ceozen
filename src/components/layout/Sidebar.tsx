@@ -7,7 +7,7 @@ import type { Profile } from '@/types';
 import {
   LayoutDashboard, ShoppingCart, Receipt, Package,
   BarChart3, User, LogOut, Smartphone, ChevronRight, X,
-  Users, Landmark, ArrowLeftRight
+  Users, Landmark, ArrowLeftRight, Wallet
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -46,6 +46,12 @@ const NAV_ITEMS = [
     href: '/stock',
     icon: Package,
     roles: ['admin', 'collaborateur'],
+  },
+  {
+    label: 'Trésorerie',
+    href: '/tresorerie',
+    icon: Wallet,
+    roles: ['admin'],
   },
   {
     label: 'Rapports',
