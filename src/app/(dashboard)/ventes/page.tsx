@@ -159,6 +159,15 @@ export default function VentesPage() {
   function updateLine(idx: number, field: 'qty' | 'unit_price' | 'discount', value: number) {
     setLines(prev => {
       const next = [...prev];
+      if (field === 'qty') {
+        const stockMax = next[idx].product.stock_qty;
+        if (value > stockMax) {
+          setError(`Stock insuffisant — seulement ${stockMax} unité(s) disponible(s) pour "${next[idx].product.name}".`);
+          setTimeout(() => setError(''), 4000);
+          value = stockMax; // plafonne à la valeur max
+        }
+        if (value < 1) value = 1;
+      }
       next[idx] = { ...next[idx], [field]: value };
       return next;
     });
@@ -183,6 +192,16 @@ export default function VentesPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (lines.length === 0) return;
+
+    // Vérification finale stock avant soumission
+    for (const line of lines) {
+      if (line.qty > line.product.stock_qty) {
+        setError(`Stock insuffisant pour "${line.product.name}" — ${line.product.stock_qty} dispo, ${line.qty} demandé(s).`);
+        setTimeout(() => setError(''), 5000);
+        return;
+      }
+    }
+
     setSaving(true);
 
     const { data: { user } } = await supabase.auth.getUser();
