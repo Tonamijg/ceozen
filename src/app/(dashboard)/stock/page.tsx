@@ -680,10 +680,30 @@ export default function StockPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="label">Référence *</label>
-                <input type="text" value={productForm.reference}
-                  onChange={(e) => setProductForm(f => ({ ...f, reference: e.target.value }))}
-                  className="input" placeholder="ex: TEL-003" required
-                />
+                <div className="flex gap-2">
+                  <input type="text" value={productForm.reference}
+                    onChange={(e) => setProductForm(f => ({ ...f, reference: e.target.value }))}
+                    className="input flex-1" placeholder="ex: TEL-003" required
+                  />
+                  <button
+                    type="button"
+                    title="Générer automatiquement"
+                    onClick={() => {
+                      const now = new Date();
+                      const prefix = productForm.name
+                        ? productForm.name.replace(/\s+/g, '').slice(0, 3).toUpperCase()
+                        : 'PRD';
+                      const yy  = String(now.getFullYear()).slice(2);
+                      const mm  = String(now.getMonth() + 1).padStart(2, '0');
+                      const dd  = String(now.getDate()).padStart(2, '0');
+                      const seq = String(now.getHours()).padStart(2,'0') + String(now.getMinutes()).padStart(2,'0');
+                      setProductForm(f => ({ ...f, reference: `${prefix}-${yy}${mm}${dd}-${seq}` }));
+                    }}
+                    className="px-3 rounded-xl border border-dark-600 bg-dark-700 text-slate-400 hover:text-neon-blue hover:border-neon-blue/40 transition-colors text-xs whitespace-nowrap"
+                  >
+                    Auto
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="label">Catégorie</label>

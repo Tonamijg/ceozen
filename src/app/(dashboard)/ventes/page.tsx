@@ -321,6 +321,9 @@ export default function VentesPage() {
     setLoadingDetail(false);
   }
 
+  /* ---- Set des ventes déjà remboursées (avoir existant) ---- */
+  const salesWithAvoir = new Set(avoirs.map(a => a.sale_id));
+
   /* ---- Lignes combinées (ventes + avoirs) triées par date ---- */
   type CombinedRow = { _t: 'sale'; d: VSale } | { _t: 'avoir'; d: AvoirRow };
   const combinedRows: CombinedRow[] = [
@@ -709,8 +712,14 @@ export default function VentesPage() {
                           </button>
                           <button
                             onClick={() => { setAvoirSale(sale); setShowAvoir(true); }}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-orange-400 hover:bg-orange-500/10 transition-colors"
-                            title="Créer un avoir"
+                            disabled={salesWithAvoir.has(sale.id)}
+                            className={cn(
+                              "p-1.5 rounded-lg transition-colors",
+                              salesWithAvoir.has(sale.id)
+                                ? "text-slate-600 cursor-not-allowed opacity-40"
+                                : "text-slate-500 hover:text-orange-400 hover:bg-orange-500/10"
+                            )}
+                            title={salesWithAvoir.has(sale.id) ? "Avoir déjà émis sur cette vente" : "Créer un avoir"}
                           >
                             <RotateCcw className="w-3.5 h-3.5" />
                           </button>
