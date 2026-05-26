@@ -8,7 +8,7 @@ import { PAYMENT_LABELS, PAYMENT_BADGE_CLASS, REAPPRO_CATEGORY } from '@/types';
 import type { PaymentMethod } from '@/types';
 import {
   Plus, X, Loader2, Receipt, CheckCircle2, ChevronDown,
-  Search, Trash2, Package, AlertCircle
+  Search, Trash2, Package, AlertCircle, ShieldAlert
 } from 'lucide-react';
 
 interface ExpenseRow extends Expense { category?: ExpenseCategory; }
@@ -33,6 +33,9 @@ export default function DepensesPage() {
   const [loading,        setLoading]        = useState(true);
   const [saving,         setSaving]         = useState(false);
   const [success,        setSuccess]        = useState(false);
+  const [userRole,       setUserRole]       = useState('');
+  const [confirmDelExp,  setConfirmDelExp]  = useState<ExpenseRow | null>(null);
+  const [deletingExpId,  setDeletingExpId]  = useState<string | null>(null);
   const [filterMonth,    setFilterMonth]    = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -63,11 +66,15 @@ export default function DepensesPage() {
       supabase.from('expense_categories').select('*').order('name'),
       supabase.from('products').select('*, category:product_categories(name)').eq('is_active', true).order('name'),
       supabase.from('suppliers').select('*').order('name'),
-    ]).then(([{ data: cats }, { data: prods }, { data: sups }]) => {
+      supabase.auth.getUser().then(({ data: { user } }) =>
+        user ? supabase.from('profiles').select('role').eq('id', user.id).single() : null
+      ),
+    ]).then(([{ data: cats }, { data: prods }, { data: sups }, roleRes]) => {
       setCategories(cats ?? []);
       setProducts((prods as Product[]) ?? []);
       setSuppliers((sups as Supplier[]) ?? []);
       if (cats?.[0]) { setCategoryId(cats[0].id); setCategoryName(cats[0].name); }
+      if (roleRes?.data) setUserRole((roleRes.data as { role: string }).role);
     });
   }, [supabase]);
 
@@ -192,6 +199,42 @@ export default function DepensesPage() {
     setReapproLines([]);
     setShowForm(false);
     loadExpenses();
+  }
+
+  /* ---- Suppression dépense (admin) ---- */
+  async function handleDeleteExpense(expense: ExpenseRow) {
+    setDeletingExpId(expense.id);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // Si réappro → vérifier les lignes et inverser le stock
+      const { data: expItems } = await supabase
+        .from('expense_items').select('product_id, qty').eq('expense_id', expense.id);
+
+      if (expItems && expItems.length > 0) {
+        await supabase.from('stock_movements').insert(
+          expItems.map((item: { product_id: string; qty: number }) => ({
+            product_id:     item.product_id,
+            type:           'sortie',
+            qty:            -item.qty,
+            reference_id:   expense.id,
+            reference_type: 'annulation_reappro',
+            notes:          `Annulation réappro : ${expense.description}`,
+            created_by:     user!.id,
+          }))
+        );
+      }
+
+      // Suppression dépense (cascade → expense_items)
+      await supabase.from('expenses').delete().eq('id', expense.id);
+
+      setConfirmDelExp(null);
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+      loadExpenses();
+    } finally {
+      setDeletingExpId(null);
+    }
   }
 
   const totalMonth = expenses.reduce((s, e) => s + (e.amount ?? 0), 0);
@@ -492,6 +535,7 @@ export default function DepensesPage() {
                     <th className="px-5 py-3 font-medium">Fournisseur</th>
                     <th className="px-5 py-3 font-medium">Règlement</th>
                     <th className="px-5 py-3 font-medium text-right">Montant</th>
+                    {userRole === 'admin' && <th className="px-5 py-3 font-medium text-center">Action</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-dark-600">
@@ -542,6 +586,20 @@ export default function DepensesPage() {
                         <td className="px-5 py-3.5 text-right font-semibold text-white">
                           {formatCFA(e.amount)}
                         </td>
+                        {userRole === 'admin' && (
+                          <td className="px-5 py-3.5 text-center">
+                            <button
+                              onClick={() => setConfirmDelExp(e)}
+                              disabled={deletingExpId === e.id}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-40"
+                              title="Supprimer la dépense"
+                            >
+                              {deletingExpId === e.id
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                : <Trash2 className="w-3.5 h-3.5" />}
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     ))
                   )}
@@ -558,6 +616,48 @@ export default function DepensesPage() {
             </div>
           </div>
       </div>
+      {/* ===== MODAL CONFIRMATION SUPPRESSION DÉPENSE ===== */}
+      {confirmDelExp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="card w-full max-w-md p-6 space-y-4 border border-red-500/30">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center flex-shrink-0">
+                <ShieldAlert className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-200">Supprimer la dépense</h3>
+                <p className="text-xs text-slate-500 mt-0.5">{confirmDelExp.description}</p>
+              </div>
+            </div>
+            <div className="bg-dark-700 rounded-xl p-4 space-y-1.5 text-sm">
+              <div className="flex justify-between"><span className="text-slate-400">Catégorie</span><span className="text-slate-200">{(confirmDelExp.category as ExpenseCategory | undefined)?.name ?? '—'}</span></div>
+              <div className="flex justify-between"><span className="text-slate-400">Date</span><span className="text-slate-200">{formatDate(confirmDelExp.expense_date)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-400">Montant</span><span className="font-bold text-white">{formatCFA(confirmDelExp.amount)}</span></div>
+            </div>
+            {(confirmDelExp.category as ExpenseCategory | undefined)?.name === 'Réapprovisionnement' && (
+              <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-300 text-xs">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <span>C&apos;est un réappro — <strong>le stock sera décrémenté automatiquement</strong> pour annuler l&apos;entrée.</span>
+              </div>
+            )}
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300 text-xs">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <span>Action irréversible.</span>
+            </div>
+            <div className="flex justify-end gap-3 pt-1">
+              <button onClick={() => setConfirmDelExp(null)} className="btn-secondary">Annuler</button>
+              <button
+                onClick={() => handleDeleteExpense(confirmDelExp)}
+                disabled={deletingExpId !== null}
+                className="btn-danger min-w-36"
+              >
+                {deletingExpId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                {deletingExpId ? 'Suppression…' : 'Confirmer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

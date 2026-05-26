@@ -77,14 +77,23 @@ export default function VentesPage() {
   const [detailItems,    setDetailItems]    = useState<SaleItem[]>([]);
   const [loadingDetail,  setLoadingDetail]  = useState(false);
 
+  /* ---- Rôle utilisateur ---- */
+  const [userRole,       setUserRole]       = useState<string>('');
+  const [deletingSaleId, setDeletingSaleId] = useState<string | null>(null);
+  const [confirmDelete,  setConfirmDelete]  = useState<VSale | null>(null);
+
   /* ---- Chargements initiaux ---- */
   useEffect(() => {
     Promise.all([
       supabase.from('products').select('*, category:product_categories(name)').eq('is_active', true).order('name'),
       supabase.from('clients').select('*').eq('is_active', true).order('name'),
-    ]).then(([{ data: prods }, { data: cls }]) => {
+      supabase.auth.getUser().then(({ data: { user } }) =>
+        user ? supabase.from('profiles').select('role').eq('id', user.id).single() : null
+      ),
+    ]).then(([{ data: prods }, { data: cls }, roleRes]) => {
       setProducts((prods as Product[]) ?? []);
       setClients((cls as Client[]) ?? []);
+      if (roleRes?.data) setUserRole((roleRes.data as { role: string }).role);
     });
   }, [supabase]);
 
@@ -325,6 +334,46 @@ export default function VentesPage() {
     setSuccess(`Avoir créé — stock remis à jour automatiquement`);
     setTimeout(() => setSuccess(''), 4000);
     loadSales();
+  }
+
+  /* ---- Suppression vente (admin) ---- */
+  async function handleDeleteSale(sale: VSale) {
+    setDeletingSaleId(sale.id);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // 1. Récupérer les articles pour restaurer le stock
+      const { data: items } = await supabase
+        .from('sale_items').select('product_id, qty').eq('sale_id', sale.id);
+
+      // 2. Insérer des mouvements stock positifs (entrée = restauration)
+      if (items && items.length > 0) {
+        await supabase.from('stock_movements').insert(
+          items.map((item: { product_id: string; qty: number }) => ({
+            product_id:     item.product_id,
+            type:           'entree',
+            qty:            item.qty,
+            reference_id:   sale.id,
+            reference_type: 'annulation_vente',
+            notes:          `Annulation vente ${sale.sale_number}`,
+            created_by:     user!.id,
+          }))
+        );
+      }
+
+      // 3. Supprimer les avoirs liés (contrainte on delete restrict)
+      await supabase.from('sale_avoirs').delete().eq('sale_id', sale.id);
+
+      // 4. Supprimer la vente (cascade → sale_items)
+      await supabase.from('sales').delete().eq('id', sale.id);
+
+      setConfirmDelete(null);
+      setSuccess('Vente supprimée — stock restauré automatiquement');
+      setTimeout(() => setSuccess(''), 4000);
+      loadSales();
+    } finally {
+      setDeletingSaleId(null);
+    }
   }
 
   /* ---- Ouvrir détail vente ---- */
@@ -742,6 +791,18 @@ export default function VentesPage() {
                           >
                             <RotateCcw className="w-3.5 h-3.5" />
                           </button>
+                          {userRole === 'admin' && (
+                            <button
+                              onClick={() => setConfirmDelete(sale)}
+                              disabled={deletingSaleId === sale.id}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-40"
+                              title="Supprimer la vente (Admin)"
+                            >
+                              {deletingSaleId === sale.id
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                : <Trash2 className="w-3.5 h-3.5" />}
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -869,6 +930,43 @@ export default function VentesPage() {
             {detailSale.notes && (
               <p className="text-xs text-slate-500 italic border-t border-dark-600 pt-3">{detailSale.notes}</p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ===== MODAL CONFIRMATION SUPPRESSION VENTE ===== */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="card w-full max-w-md p-6 space-y-4 border border-red-500/30">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center flex-shrink-0">
+                <Trash2 className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-200">Supprimer la vente</h3>
+                <p className="text-xs text-slate-500 mt-0.5 font-mono text-red-300">{confirmDelete.sale_number}</p>
+              </div>
+            </div>
+            <div className="bg-dark-700 rounded-xl p-4 space-y-1.5 text-sm">
+              <div className="flex justify-between"><span className="text-slate-400">Client</span><span className="text-slate-200">{confirmDelete.client_name ?? '—'}</span></div>
+              <div className="flex justify-between"><span className="text-slate-400">Montant</span><span className="font-bold text-white">{formatCFA(confirmDelete.total)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-400">Articles</span><span className="text-slate-200">{confirmDelete.item_count} art.</span></div>
+            </div>
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300 text-xs">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <span>La vente, ses articles et ses avoirs seront supprimés. <strong>Le stock sera restauré automatiquement.</strong> Action irréversible.</span>
+            </div>
+            <div className="flex justify-end gap-3 pt-1">
+              <button onClick={() => setConfirmDelete(null)} className="btn-secondary">Annuler</button>
+              <button
+                onClick={() => handleDeleteSale(confirmDelete)}
+                disabled={deletingSaleId !== null}
+                className="btn-danger min-w-36"
+              >
+                {deletingSaleId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                {deletingSaleId ? 'Suppression…' : 'Confirmer la suppression'}
+              </button>
+            </div>
           </div>
         </div>
       )}
