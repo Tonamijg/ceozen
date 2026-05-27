@@ -13,20 +13,23 @@ export default async function DashboardPage() {
     .single();
 
   // CA du mois en cours
-  const now         = new Date();
+  const now          = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const todayDate    = now.toISOString().split('T')[0]; // YYYY-MM-DD
+
   const { data: monthSales } = await supabase
     .from('sales')
     .select('total')
     .gte('created_at', startOfMonth);
   const revenueMonth = monthSales?.reduce((sum, s) => sum + (s.total ?? 0), 0) ?? 0;
 
-  // Dépenses du mois
-  const { data: monthExpenses } = await supabase
+  // Dépenses du JOUR — filtre par expense_date (pas created_at)
+  // pour que les dépenses backdatées ne polluent pas le KPI "Aujourd'hui"
+  const { data: todayExpenses } = await supabase
     .from('expenses')
     .select('amount')
-    .gte('created_at', startOfMonth);
-  const expensesMonth = monthExpenses?.reduce((sum, e) => sum + (e.amount ?? 0), 0) ?? 0;
+    .eq('expense_date', todayDate);
+  const expensesMonth = todayExpenses?.reduce((sum, e) => sum + (e.amount ?? 0), 0) ?? 0;
 
   // Valeur totale du stock
   const { data: stockValue } = await supabase

@@ -199,7 +199,6 @@ export default function DashboardClient({
 
   // ── When period changes, refetch ─────────────────────────────────────────────
   useEffect(() => {
-    if (period === 'today') return; // initial data already correct for today
     fetchPeriodStats(period);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period]);
