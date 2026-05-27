@@ -27,27 +27,38 @@ const PERIODS: { key: Period; label: string }[] = [
   { key: 'year',  label: 'Cette année'},
 ];
 
+// ─── Helper : date locale YYYY-MM-DD (timezone-safe) ──────────────────────────
+function localDateStr(d: Date): string {
+  return [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, '0'),
+    String(d.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
 // ─── Helper : compute date range from a Period ────────────────────────────────
-function getDateRange(period: Period): { from: string; to: string; chartDays: number } {
-  const now   = new Date();
-  const to    = now.toISOString();
+function getDateRange(period: Period): { from: string; to: string; fromDate: string; toDate: string; chartDays: number } {
+  const now    = new Date();
+  const to     = now.toISOString();
+  const toDate = localDateStr(now);
 
   if (period === 'today') {
-    const from = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-    return { from, to, chartDays: 1 };
+    const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const fromDate = localDateStr(dayStart);
+    return { from: dayStart.toISOString(), to, fromDate, toDate: fromDate, chartDays: 1 };
   }
   if (period === 'week') {
     const from = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
     from.setHours(0, 0, 0, 0);
-    return { from: from.toISOString(), to, chartDays: 7 };
+    return { from: from.toISOString(), to, fromDate: localDateStr(from), toDate, chartDays: 7 };
   }
   if (period === 'month') {
-    const from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-    return { from, to, chartDays: 30 };
+    const from = new Date(now.getFullYear(), now.getMonth(), 1);
+    return { from: from.toISOString(), to, fromDate: localDateStr(from), toDate, chartDays: 30 };
   }
   // year
-  const from = new Date(now.getFullYear(), 0, 1).toISOString();
-  return { from, to, chartDays: 365 };
+  const from = new Date(now.getFullYear(), 0, 1);
+  return { from: from.toISOString(), to, fromDate: localDateStr(from), toDate, chartDays: 365 };
 }
 
 // ─── Build aggregated chart data ──────────────────────────────────────────────
@@ -128,7 +139,7 @@ export default function DashboardClient({
   // ── Fetches stats for a given period ────────────────────────────────────────
   const fetchPeriodStats = useCallback(async (p: Period) => {
     setLoadingP(true);
-    const { from, to, chartDays } = getDateRange(p);
+    const { from, to, fromDate, toDate, chartDays } = getDateRange(p);
 
     const [
       { data: periodSales },
@@ -141,11 +152,11 @@ export default function DashboardClient({
     ] = await Promise.all([
       supabase.from('sales').select('total').gte('created_at', from).lte('created_at', to),
       supabase.from('trocs').select('complement').gte('created_at', from).lte('created_at', to),
-      supabase.from('expenses').select('amount').gte('expense_date', from.split('T')[0]).lte('expense_date', to.split('T')[0]),
+      supabase.from('expenses').select('amount').gte('expense_date', fromDate).lte('expense_date', toDate),
       supabase.from('v_stock_alerts').select('*').eq('is_low_stock', true).order('stock_qty').limit(10),
       supabase.from('v_sales').select('*').order('created_at', { ascending: false }).limit(20),
       supabase.from('sales').select('total, created_at').gte('created_at', from).lte('created_at', to),
-      supabase.from('expenses').select('amount, expense_date').gte('expense_date', from.split('T')[0]).lte('expense_date', to.split('T')[0]),
+      supabase.from('expenses').select('amount, expense_date').gte('expense_date', fromDate).lte('expense_date', toDate),
     ]);
 
     const salesRevenue = periodSales?.reduce((s, x) => s + (x.total     ?? 0), 0) ?? 0;
