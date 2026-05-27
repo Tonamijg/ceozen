@@ -336,37 +336,21 @@ export default function VentesPage() {
     loadSales();
   }
 
-  /* ---- Suppression vente (admin) ---- */
+  /* ---- Suppression vente (admin) — via API route service role ---- */
   async function handleDeleteSale(sale: VSale) {
     setDeletingSaleId(sale.id);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-
-      // 1. Récupérer les articles pour restaurer le stock
-      const { data: items } = await supabase
-        .from('sale_items').select('product_id, qty').eq('sale_id', sale.id);
-
-      // 2. Insérer des mouvements stock positifs (entrée = restauration)
-      if (items && items.length > 0) {
-        await supabase.from('stock_movements').insert(
-          items.map((item: { product_id: string; qty: number }) => ({
-            product_id:     item.product_id,
-            type:           'entree',
-            qty:            item.qty,
-            reference_id:   sale.id,
-            reference_type: 'annulation_vente',
-            notes:          `Annulation vente ${sale.sale_number}`,
-            created_by:     user!.id,
-          }))
-        );
+      const res = await fetch('/api/admin/delete-sale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sale_id: sale.id, sale_number: sale.sale_number }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.error ?? 'Erreur lors de la suppression');
+        setTimeout(() => setError(''), 5000);
+        return;
       }
-
-      // 3. Supprimer les avoirs liés (contrainte on delete restrict)
-      await supabase.from('sale_avoirs').delete().eq('sale_id', sale.id);
-
-      // 4. Supprimer la vente (cascade → sale_items)
-      await supabase.from('sales').delete().eq('id', sale.id);
-
       setConfirmDelete(null);
       setSuccess('Vente supprimée — stock restauré automatiquement');
       setTimeout(() => setSuccess(''), 4000);
