@@ -60,6 +60,19 @@ export function stockStatusColor(qty: number, min: number): string {
   return 'green';
 }
 
+/**
+ * Retourne la date locale au format YYYY-MM-DD (timezone-safe).
+ * Contrairement à toISOString().split('T')[0] qui est en UTC,
+ * cette fonction respecte le fuseau horaire du client.
+ */
+export function localDateStr(d: Date = new Date()): string {
+  return [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, '0'),
+    String(d.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
 /** Debounce simple */
 export function debounce<T extends (...args: unknown[]) => void>(
   fn: T,

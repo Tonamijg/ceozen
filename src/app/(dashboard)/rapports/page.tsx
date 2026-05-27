@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { formatCFA, formatDate } from '@/lib/utils';
+import { formatCFA, formatDate, localDateStr } from '@/lib/utils';
 import type { VStockAlert } from '@/types';
 import {
   BarChart3, TrendingUp, Package, Receipt,
@@ -54,8 +54,8 @@ export default function RapportsPage() {
 
   const now = new Date();
   const [period, setPeriod] = useState({
-    from: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0],
-    to:   now.toISOString().split('T')[0],
+    from: localDateStr(new Date(now.getFullYear(), now.getMonth(), 1)),
+    to:   localDateStr(now),
   });
 
   const [loading,        setLoading]        = useState(true);

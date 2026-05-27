@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { formatCFA, formatDate, cn } from '@/lib/utils';
+import { formatCFA, formatDate, cn, localDateStr } from '@/lib/utils';
 import { printSaleReceipt } from '@/lib/print';
 import type { Product, VSale, Client, SaleItem } from '@/types';
 import { PAYMENT_LABELS, PAYMENT_BADGE_CLASS } from '@/types';
@@ -612,7 +612,7 @@ export default function VentesPage() {
                 <input type="date" value={creditDueDate}
                   onChange={(e) => setCreditDueDate(e.target.value)}
                   className="input"
-                  min={new Date().toISOString().split('T')[0]}
+                  min={localDateStr()}
                 />
               </div>
             )}

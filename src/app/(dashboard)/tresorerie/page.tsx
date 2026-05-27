@@ -7,7 +7,7 @@ import {
   Calendar, ChevronDown, ChevronUp, Loader2, PiggyBank,
   Banknote, Smartphone, Building2, X, Check
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, localDateStr } from '@/lib/utils';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface TreasuryAccount {
@@ -97,7 +97,7 @@ export default function TresoreriePage() {
   const [showApport,   setShowApport]   = useState(false);
   const [apportAccId,  setApportAccId]  = useState('');
   const [apportAmt,    setApportAmt]    = useState('');
-  const [apportDate,   setApportDate]   = useState(new Date().toISOString().split('T')[0]);
+  const [apportDate,   setApportDate]   = useState(() => localDateStr());
   const [apportNote,   setApportNote]   = useState('');
   const [savingApport, setSavingApport] = useState(false);
 

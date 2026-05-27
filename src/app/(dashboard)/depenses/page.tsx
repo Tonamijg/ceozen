@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { formatCFA, formatDate, cn } from '@/lib/utils';
+import { formatCFA, formatDate, cn, localDateStr } from '@/lib/utils';
 import type { Expense, ExpenseCategory, Product, Supplier } from '@/types';
 import { PAYMENT_LABELS, PAYMENT_BADGE_CLASS, REAPPRO_CATEGORY } from '@/types';
 import type { PaymentMethod } from '@/types';
@@ -46,7 +46,7 @@ export default function DepensesPage() {
   const [categoryName,   setCategoryName]   = useState('');
   const [amount,         setAmount]         = useState('');
   const [description,    setDescription]    = useState('');
-  const [expenseDate,    setExpenseDate]    = useState(new Date().toISOString().split('T')[0]);
+  const [expenseDate,    setExpenseDate]    = useState(() => localDateStr());
   const [supplierName,      setSupplierName]      = useState('');
   const [suppliers,         setSuppliers]         = useState<Supplier[]>([]);
   const [supplierSearch,    setSupplierSearch]    = useState('');
@@ -82,7 +82,7 @@ export default function DepensesPage() {
     setLoading(true);
     const [year, month] = filterMonth.split('-');
     const start = `${year}-${month}-01`;
-    const end   = new Date(Number(year), Number(month), 0).toISOString().split('T')[0];
+    const end   = localDateStr(new Date(Number(year), Number(month), 0));
     const { data } = await supabase
       .from('expenses')
       .select('*, category:expense_categories(*)')
