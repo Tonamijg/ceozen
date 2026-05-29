@@ -80,86 +80,29 @@ export default function TrocsPage() {
     if (!selectedProd || !receivedName || !givenPrice || !receivedValue) return;
     setSaving(true);
     try {
-      // 1. Créer le produit repris dans le stock
-      const { data: newProd, error: prodErr } = await supabase
-        .from('products')
-        .insert({
-          name:        receivedName,
-          reference:   receivedRef.trim() || (() => {
-            const now = new Date();
-            const yy = String(now.getFullYear()).slice(2);
-            const mm = String(now.getMonth() + 1).padStart(2, '0');
-            const dd = String(now.getDate()).padStart(2, '0');
-            const hh = String(now.getHours()).padStart(2, '0');
-            const min = String(now.getMinutes()).padStart(2, '0');
-            return `TRC-${yy}${mm}${dd}-${hh}${min}`;
-          })(),
-          buy_price:   parseFloat(receivedValue),
-          sell_price:  parseFloat(receivedValue),
-          stock_qty:   1,
-          stock_min:   1,
-          unit:        'unité',
-          description: `Reprise troc — ${clientName || 'Client'}`,
-          is_active:   true,
-        })
-        .select()
-        .single();
-      if (prodErr) throw prodErr;
-
-      // 2. Diminuer le stock du produit donné
-      await supabase
-        .from('products')
-        .update({ stock_qty: selectedProd.stock_qty - 1 })
-        .eq('id', selectedProd.id);
-
-      // 3. Numéro de troc
       const trocNumber = await getNextTrocNumber(supabase);
 
-      // 4. Mouvements de stock
-      await supabase.from('stock_movements').insert([
-        {
-          product_id:     selectedProd.id,
-          type:           'sortie',
-          qty:            1,
-          reference_type: 'troc',
-          notes:          `Troc ${trocNumber} — donné au client`,
-        },
-        {
-          product_id:     newProd.id,
-          type:           'entree',
-          qty:            1,
-          unit_cost:      parseFloat(receivedValue),
-          reference_type: 'troc',
-          notes:          `Troc ${trocNumber} — repris au client`,
-        },
-      ]);
-
-      // 5. Enregistrer le troc
-      await supabase.from('trocs').insert({
-        troc_number:           trocNumber,
-        client_name:           clientName  || null,
-        client_phone:          clientPhone || null,
-        product_given_id:      selectedProd.id,
-        product_given_name:    selectedProd.name,
-        product_given_price:   parseFloat(givenPrice),
-        product_received_id:   newProd.id,
-        product_received_name: receivedName,
-        product_received_ref:  receivedRef || null,
-        product_received_value: parseFloat(receivedValue),
-        complement:            complement,
-        payment_method:        paymentMethod,
-        is_settled:            paymentMethod !== 'credit',
-        credit_due_date:       paymentMethod === 'credit' && creditDueDate ? creditDueDate : null,
-        notes:                 notes || null,
+      // API route service_role (bypasse RLS pour products + stock)
+      const res = await fetch('/api/troc/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientName, clientPhone,
+          selectedProdId:    selectedProd.id,
+          selectedProdName:  selectedProd.name,
+          selectedProdStock: selectedProd.stock_qty,
+          givenPrice,
+          receivedName, receivedRef, receivedValue,
+          complement: String(complement),
+          paymentMethod, creditDueDate, notes,
+          trocNumber,
+        }),
       });
 
-      // Auto-sauvegarder le client dans la base s'il est nouveau
-      if (clientName.trim()) {
-        await supabase.from('clients')
-          .upsert({ name: clientName.trim() }, { onConflict: 'name', ignoreDuplicates: true });
-      }
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error ?? 'Erreur serveur');
 
-      // Notification WhatsApp
+      // Notification WhatsApp (best-effort)
       fetch('/api/notify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -180,7 +123,8 @@ export default function TrocsPage() {
       resetForm();
       loadData();
     } catch (e) {
-      console.error(e);
+      console.error('Erreur troc:', e);
+      alert(`Erreur : ${e instanceof Error ? e.message : 'Impossible de valider le troc'}`);
     } finally {
       setSaving(false);
     }
