@@ -8,8 +8,16 @@ import { PAYMENT_LABELS, PAYMENT_BADGE_CLASS, REAPPRO_CATEGORY } from '@/types';
 import type { PaymentMethod } from '@/types';
 import {
   Plus, X, Loader2, Receipt, CheckCircle2, ChevronDown,
-  Search, Trash2, Package, AlertCircle, ShieldAlert
+  Search, Trash2, Package, AlertCircle, ShieldAlert, Eye
 } from 'lucide-react';
+
+interface ExpenseItem {
+  id: string;
+  product_id: string;
+  qty: number;
+  unit_cost: number;
+  product?: { name: string; reference: string };
+}
 
 interface ExpenseRow extends Expense { category?: ExpenseCategory; }
 
@@ -36,6 +44,10 @@ export default function DepensesPage() {
   const [userRole,       setUserRole]       = useState('');
   const [confirmDelExp,  setConfirmDelExp]  = useState<ExpenseRow | null>(null);
   const [deletingExpId,  setDeletingExpId]  = useState<string | null>(null);
+  const [showDetail,     setShowDetail]     = useState(false);
+  const [detailExpense,  setDetailExpense]  = useState<ExpenseRow | null>(null);
+  const [detailItems,    setDetailItems]    = useState<ExpenseItem[]>([]);
+  const [loadingDetail,  setLoadingDetail]  = useState(false);
   const [filterMonth,    setFilterMonth]    = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -235,6 +247,20 @@ export default function DepensesPage() {
     } finally {
       setDeletingExpId(null);
     }
+  }
+
+  /* ---- Ouvrir le détail d'une dépense ---- */
+  async function openExpenseDetail(expense: ExpenseRow) {
+    setDetailExpense(expense);
+    setShowDetail(true);
+    setLoadingDetail(true);
+    setDetailItems([]);
+    const { data } = await supabase
+      .from('expense_items')
+      .select('*, product:products(name, reference)')
+      .eq('expense_id', expense.id);
+    setDetailItems((data as ExpenseItem[]) ?? []);
+    setLoadingDetail(false);
   }
 
   const totalMonth = expenses.reduce((s, e) => s + (e.amount ?? 0), 0);
@@ -535,7 +561,7 @@ export default function DepensesPage() {
                     <th className="px-5 py-3 font-medium">Fournisseur</th>
                     <th className="px-5 py-3 font-medium">Règlement</th>
                     <th className="px-5 py-3 font-medium text-right">Montant</th>
-                    {userRole === 'admin' && <th className="px-5 py-3 font-medium text-center">Action</th>}
+                    <th className="px-5 py-3 font-medium text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-dark-600">
@@ -549,7 +575,7 @@ export default function DepensesPage() {
                     ))
                   ) : expenses.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-5 py-10 text-center text-slate-600">
+                      <td colSpan={7} className="px-5 py-10 text-center text-slate-600">
                         Aucune dépense ce mois
                       </td>
                     </tr>
@@ -586,20 +612,29 @@ export default function DepensesPage() {
                         <td className="px-5 py-3.5 text-right font-semibold text-white">
                           {formatCFA(e.amount)}
                         </td>
-                        {userRole === 'admin' && (
-                          <td className="px-5 py-3.5 text-center">
+                        <td className="px-5 py-3.5 text-center">
+                          <div className="flex items-center justify-center gap-2">
                             <button
-                              onClick={() => setConfirmDelExp(e)}
-                              disabled={deletingExpId === e.id}
-                              className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-40"
-                              title="Supprimer la dépense"
+                              onClick={() => openExpenseDetail(e)}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-neon-blue hover:bg-neon-blue/10 transition-colors"
+                              title="Voir les détails"
                             >
-                              {deletingExpId === e.id
-                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                : <Trash2 className="w-3.5 h-3.5" />}
+                              <Eye className="w-3.5 h-3.5" />
                             </button>
-                          </td>
-                        )}
+                            {userRole === 'admin' && (
+                              <button
+                                onClick={() => setConfirmDelExp(e)}
+                                disabled={deletingExpId === e.id}
+                                className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-40"
+                                title="Supprimer la dépense"
+                              >
+                                {deletingExpId === e.id
+                                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  : <Trash2 className="w-3.5 h-3.5" />}
+                              </button>
+                            )}
+                          </div>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -607,7 +642,7 @@ export default function DepensesPage() {
                 {expenses.length > 0 && (
                   <tfoot className="border-t border-dark-600">
                     <tr>
-                      <td colSpan={5} className="px-5 py-3 text-sm text-slate-400 font-medium">Total</td>
+                      <td colSpan={6} className="px-5 py-3 text-sm text-slate-400 font-medium">Total</td>
                       <td className="px-5 py-3 text-right text-base font-bold text-white">{formatCFA(totalMonth)}</td>
                     </tr>
                   </tfoot>
@@ -616,6 +651,90 @@ export default function DepensesPage() {
             </div>
           </div>
       </div>
+      {/* ===== MODAL DÉTAIL DÉPENSE ===== */}
+      {showDetail && detailExpense && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          onClick={() => setShowDetail(false)}
+        >
+          <div className="card w-full max-w-lg p-6 space-y-4" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-semibold text-slate-200">{detailExpense.description}</p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {formatDate(detailExpense.expense_date)}
+                  {detailExpense.supplier_name ? ` · ${detailExpense.supplier_name}` : ''}
+                  {' · '}
+                  <span
+                    style={{ color: (detailExpense.category as ExpenseCategory | undefined)?.color ?? '#6b7280' }}
+                  >
+                    {(detailExpense.category as ExpenseCategory | undefined)?.name ?? 'Autre'}
+                  </span>
+                </p>
+              </div>
+              <button onClick={() => setShowDetail(false)} className="text-slate-500 hover:text-slate-200">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Lignes réappro (si disponibles) */}
+            {loadingDetail ? (
+              <div className="py-6 text-center text-slate-500 text-sm">Chargement…</div>
+            ) : detailItems.length > 0 ? (
+              <div className="bg-dark-700 rounded-xl overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-dark-600 flex items-center gap-2">
+                  <Package className="w-3.5 h-3.5 text-neon-violet" />
+                  <p className="text-xs font-semibold text-slate-300 uppercase tracking-wide">Produits réapprovisionnés</p>
+                </div>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-dark-600 text-xs text-slate-500">
+                      <th className="px-4 py-2.5 text-left font-medium">Produit</th>
+                      <th className="px-4 py-2.5 text-center font-medium">Qté</th>
+                      <th className="px-4 py-2.5 text-right font-medium">P.U. achat</th>
+                      <th className="px-4 py-2.5 text-right font-medium">Sous-total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-dark-600/50">
+                    {detailItems.map((item, i) => {
+                      const prod = Array.isArray(item.product) ? item.product[0] : item.product;
+                      return (
+                        <tr key={i}>
+                          <td className="px-4 py-2.5">
+                            <p className="text-slate-200 font-medium">{prod?.name ?? '—'}</p>
+                            <p className="text-xs text-slate-500">{prod?.reference ?? ''}</p>
+                          </td>
+                          <td className="px-4 py-2.5 text-center text-slate-300">{item.qty}</td>
+                          <td className="px-4 py-2.5 text-right text-slate-300">{formatCFA(item.unit_cost)}</td>
+                          <td className="px-4 py-2.5 text-right font-semibold text-white">
+                            {formatCFA(item.qty * item.unit_cost)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500 italic text-center py-4">
+                Aucune ligne de détail pour cette dépense.
+              </p>
+            )}
+
+            {/* Total */}
+            <div className="flex items-center justify-between pt-1 border-t border-dark-600">
+              <span className={cn('badge text-xs', PAYMENT_BADGE_CLASS[detailExpense.payment_method as PaymentMethod] ?? 'badge-green')}>
+                {PAYMENT_LABELS[detailExpense.payment_method as PaymentMethod] ?? detailExpense.payment_method}
+              </span>
+              <div className="text-right">
+                <p className="text-xs text-slate-500">Montant total</p>
+                <p className="text-lg font-bold gradient-text">{formatCFA(detailExpense.amount)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ===== MODAL CONFIRMATION SUPPRESSION DÉPENSE ===== */}
       {confirmDelExp && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">

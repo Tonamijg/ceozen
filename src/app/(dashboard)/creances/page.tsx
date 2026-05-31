@@ -5,9 +5,10 @@ import { createClient } from '@/lib/supabase/client';
 import type { VCreance, VDette } from '@/types';
 import {
   ArrowDownLeft, ArrowUpRight, CheckCircle2, Clock,
-  AlertTriangle, RefreshCw, Landmark
+  AlertTriangle, RefreshCw, Landmark, Plus, X, Loader2,
+  Mail, Calendar, Send
 } from 'lucide-react';
-import { formatDate } from '@/lib/utils';
+import { formatDate, localDateStr } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -17,6 +18,19 @@ function fmt(n: number) {
 
 type Tab = 'creances' | 'dettes';
 
+// ─── Type créance initiale ────────────────────────────────────────────────────
+interface VCreanceInitiale {
+  id: string;
+  client_name: string;
+  client_id?: string;
+  amount: number;
+  since_date: string;
+  description?: string;
+  is_settled: boolean;
+  settled_at?: string;
+  created_at: string;
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function CreancesPage() {
   const supabase = createClient();
@@ -24,19 +38,37 @@ export default function CreancesPage() {
   const [tab, setTab]             = useState<Tab>('creances');
   const [creances, setCreances]   = useState<VCreance[]>([]);
   const [dettes, setDettes]       = useState<VDette[]>([]);
+  const [initiales, setInitiales] = useState<VCreanceInitiale[]>([]);
   const [loading, setLoading]     = useState(true);
   const [saving, setSaving]       = useState<string | null>(null);
   const [filterSettled, setFilterSettled] = useState(false);
+  const [userRole, setUserRole]   = useState('');
+  const [sendingReminders, setSendingReminders] = useState(false);
+  const [reminderMsg, setReminderMsg] = useState('');
+
+  // ── Formulaire créance initiale ─────────────────────────────────────────────
+  const [showInitForm,  setShowInitForm]  = useState(false);
+  const [initClient,    setInitClient]    = useState('');
+  const [initAmount,    setInitAmount]    = useState('');
+  const [initSince,     setInitSince]     = useState(() => localDateStr());
+  const [initDesc,      setInitDesc]      = useState('');
+  const [savingInit,    setSavingInit]    = useState(false);
 
   // ── Chargement ──────────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [{ data: c }, { data: d }] = await Promise.all([
+    const [{ data: c }, { data: d }, { data: ini }, roleData] = await Promise.all([
       supabase.from('v_creances').select('*').order('created_at', { ascending: false }),
       supabase.from('v_dettes').select('*').order('expense_date', { ascending: false }),
+      supabase.from('creances_initiales').select('*').order('since_date', { ascending: false }),
+      supabase.auth.getUser().then(({ data: { user } }) =>
+        user ? supabase.from('profiles').select('role').eq('id', user.id).single() : null
+      ),
     ]);
     setCreances((c ?? []) as VCreance[]);
     setDettes((d ?? []) as VDette[]);
+    setInitiales((ini ?? []) as VCreanceInitiale[]);
+    if (roleData?.data) setUserRole((roleData.data as { role: string }).role);
     setLoading(false);
   }, [supabase]);
 
@@ -62,31 +94,132 @@ export default function CreancesPage() {
     loadData();
   }
 
+  // ── Marquer créance initiale soldée ────────────────────────────────────────
+  async function settleInitiale(id: string) {
+    setSaving(id);
+    await supabase.from('creances_initiales').update({
+      is_settled: true,
+      settled_at: new Date().toISOString(),
+    }).eq('id', id);
+    setSaving(null);
+    loadData();
+  }
+
+  // ── Créer une créance initiale ──────────────────────────────────────────────
+  async function handleCreateInitiale(e: React.FormEvent) {
+    e.preventDefault();
+    if (!initClient.trim() || !initAmount || !initSince) return;
+    setSavingInit(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    await supabase.from('creances_initiales').insert({
+      client_name:  initClient.trim(),
+      amount:       Number(initAmount),
+      since_date:   initSince,
+      description:  initDesc.trim() || null,
+      created_by:   user!.id,
+    });
+    setSavingInit(false);
+    setShowInitForm(false);
+    setInitClient('');
+    setInitAmount('');
+    setInitSince(localDateStr());
+    setInitDesc('');
+    loadData();
+  }
+
+  // ── Envoyer rappels par email ────────────────────────────────────────────────
+  async function sendReminders() {
+    setSendingReminders(true);
+    setReminderMsg('');
+    try {
+      const res = await fetch('/api/creances/send-reminders', { method: 'POST' });
+      const json = await res.json();
+      if (res.ok) {
+        setReminderMsg(`✅ ${json.message}`);
+      } else {
+        setReminderMsg(`❌ ${json.error ?? 'Erreur lors de l\'envoi'}`);
+      }
+    } catch {
+      setReminderMsg('❌ Erreur réseau');
+    } finally {
+      setSendingReminders(false);
+      setTimeout(() => setReminderMsg(''), 6000);
+    }
+  }
+
   // ── Totaux ──────────────────────────────────────────────────────────────────
   const totalCreances        = creances.filter(c => !c.is_settled).reduce((s, c) => s + c.amount, 0);
   const totalCreancesOverdue = creances.filter(c => c.is_overdue).reduce((s, c) => s + c.amount, 0);
+  const totalInitiales       = initiales.filter(i => !i.is_settled).reduce((s, i) => s + i.amount, 0);
   const totalDettes          = dettes.filter(d => !d.is_settled).reduce((s, d) => s + d.amount, 0);
   const totalDettesOverdue   = dettes.filter(d => d.is_overdue).reduce((s, d) => s + d.amount, 0);
 
-  const filteredCreances = filterSettled ? creances : creances.filter(c => !c.is_settled);
-  const filteredDettes   = filterSettled ? dettes   : dettes.filter(d => !d.is_settled);
+  // Créances initiales en retard = date de départ > 60 jours sans règlement
+  const initialesOverdue = initiales.filter(i => {
+    if (i.is_settled) return false;
+    const since = new Date(i.since_date);
+    const diffDays = (new Date().getTime() - since.getTime()) / (1000 * 60 * 60 * 24);
+    return diffDays > 60;
+  });
+
+  const filteredCreances   = filterSettled ? creances : creances.filter(c => !c.is_settled);
+  const filteredDettes     = filterSettled ? dettes   : dettes.filter(d => !d.is_settled);
+  const filteredInitiales  = filterSettled ? initiales : initiales.filter(i => !i.is_settled);
+
+  // Nb total créances non soldées (ventes + initiales)
+  const totalCreancesCount = creances.filter(c => !c.is_settled).length + initiales.filter(i => !i.is_settled).length;
 
   return (
     <div className="space-y-6">
 
+      {/* ── Toast rappels ───────────────────────────────────────────────────── */}
+      {reminderMsg && (
+        <div className={cn(
+          'fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl',
+          reminderMsg.startsWith('✅')
+            ? 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-300'
+            : 'bg-red-500/20 border border-red-500/30 text-red-300'
+        )}>
+          {reminderMsg}
+        </div>
+      )}
+
       {/* ── En-tête ─────────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2">
           <Landmark className="w-5 h-5 text-neon-blue" />
           <p className="text-sm text-slate-400">Suivi des créances clients et dettes fournisseurs</p>
         </div>
-        <button
-          onClick={loadData}
-          className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-200 transition-colors"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          Actualiser
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Bouton envoyer rappels */}
+          <button
+            onClick={sendReminders}
+            disabled={sendingReminders}
+            className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-neon-blue/10 text-neon-blue border border-neon-blue/20 hover:bg-neon-blue/20 transition-colors disabled:opacity-50"
+          >
+            {sendingReminders
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <Send className="w-3.5 h-3.5" />}
+            Envoyer rappels mail
+          </button>
+          {/* Bouton créance initiale (admin) */}
+          {userRole === 'admin' && (
+            <button
+              onClick={() => setShowInitForm(true)}
+              className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-violet-500/10 text-violet-400 border border-violet-500/20 hover:bg-violet-500/20 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Créance initiale
+            </button>
+          )}
+          <button
+            onClick={loadData}
+            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-200 transition-colors px-2 py-2"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Actualiser
+          </button>
+        </div>
       </div>
 
       {/* ── Cartes résumé ────────────────────────────────────────────────────── */}
@@ -95,15 +228,19 @@ export default function CreancesPage() {
           <p className="text-xs text-slate-500 flex items-center gap-1">
             <ArrowDownLeft className="w-3.5 h-3.5 text-neon-blue" /> Créances en cours
           </p>
-          <p className="text-xl font-bold text-white">{fmt(totalCreances)}</p>
-          <p className="text-xs text-slate-500">{creances.filter(c => !c.is_settled).length} vente(s)</p>
+          <p className="text-xl font-bold text-white">{fmt(totalCreances + totalInitiales)}</p>
+          <p className="text-xs text-slate-500">{totalCreancesCount} créance(s)</p>
         </div>
         <div className="card p-4 space-y-1 border-l-2 border-red-500/50">
           <p className="text-xs text-slate-500 flex items-center gap-1">
             <AlertTriangle className="w-3.5 h-3.5 text-red-400" /> Créances en retard
           </p>
-          <p className="text-xl font-bold text-red-400">{fmt(totalCreancesOverdue)}</p>
-          <p className="text-xs text-slate-500">{creances.filter(c => c.is_overdue).length} vente(s)</p>
+          <p className="text-xl font-bold text-red-400">
+            {fmt(totalCreancesOverdue + initialesOverdue.reduce((s, i) => s + i.amount, 0))}
+          </p>
+          <p className="text-xs text-slate-500">
+            {creances.filter(c => c.is_overdue).length + initialesOverdue.length} en retard
+          </p>
         </div>
         <div className="card p-4 space-y-1 border-l-2 border-orange-500/50">
           <p className="text-xs text-slate-500 flex items-center gap-1">
@@ -137,9 +274,9 @@ export default function CreancesPage() {
             >
               <ArrowDownLeft className="w-4 h-4" />
               Créances
-              {creances.filter(c => !c.is_settled).length > 0 && (
+              {totalCreancesCount > 0 && (
                 <span className="ml-1 bg-neon-blue/20 text-neon-blue text-xs px-1.5 py-0.5 rounded-full">
-                  {creances.filter(c => !c.is_settled).length}
+                  {totalCreancesCount}
                 </span>
               )}
             </button>
@@ -177,10 +314,8 @@ export default function CreancesPage() {
         {tab === 'creances' && (
           <div className="overflow-x-auto">
             {loading ? (
-              <div className="flex items-center justify-center py-20 text-slate-500 text-sm">
-                Chargement…
-              </div>
-            ) : filteredCreances.length === 0 ? (
+              <div className="flex items-center justify-center py-20 text-slate-500 text-sm">Chargement…</div>
+            ) : (filteredCreances.length === 0 && filteredInitiales.length === 0) ? (
               <div className="flex flex-col items-center justify-center py-20 gap-3 text-slate-500">
                 <CheckCircle2 className="w-10 h-10 text-emerald-400/40" />
                 <p className="text-sm">Aucune créance en cours 🎉</p>
@@ -193,7 +328,7 @@ export default function CreancesPage() {
                     <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Type</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Client</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Par</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide whitespace-nowrap">Date</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide whitespace-nowrap">Depuis</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Échéance</th>
                     <th className="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Montant</th>
                     <th className="text-center px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Statut</th>
@@ -201,6 +336,8 @@ export default function CreancesPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-dark-600/50">
+
+                  {/* Créances issues des ventes */}
                   {filteredCreances.map((c) => (
                     <tr
                       key={c.id}
@@ -222,10 +359,7 @@ export default function CreancesPage() {
                       <td className="px-4 py-3 text-slate-400 whitespace-nowrap text-xs">{formatDate(c.created_at)}</td>
                       <td className="px-4 py-3">
                         {c.credit_due_date ? (
-                          <span className={cn(
-                            'inline-flex items-center gap-1 text-xs font-medium',
-                            c.is_overdue ? 'text-red-400' : 'text-slate-300'
-                          )}>
+                          <span className={cn('inline-flex items-center gap-1 text-xs font-medium', c.is_overdue ? 'text-red-400' : 'text-slate-300')}>
                             {c.is_overdue && <AlertTriangle className="w-3.5 h-3.5" />}
                             {formatDate(c.credit_due_date)}
                           </span>
@@ -253,21 +387,84 @@ export default function CreancesPage() {
                                        hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
                           >
                             <CheckCircle2 className="w-3.5 h-3.5" />
-                            {saving === c.id ? 'Enregistrement…' : 'Marquer soldé'}
+                            {saving === c.id ? 'Enreg…' : 'Soldé'}
                           </button>
                         )}
                       </td>
                     </tr>
                   ))}
+
+                  {/* Créances initiales */}
+                  {filteredInitiales.map((ini) => {
+                    const diffDays = (new Date().getTime() - new Date(ini.since_date).getTime()) / (1000 * 60 * 60 * 24);
+                    const isOverdue = !ini.is_settled && diffDays > 60;
+                    return (
+                      <tr
+                        key={'ini-' + ini.id}
+                        className={cn(
+                          'transition-colors border-l-2 border-violet-500/30',
+                          isOverdue      ? 'bg-red-500/5 hover:bg-red-500/10'
+                          : ini.is_settled ? 'opacity-50 hover:bg-dark-700/30'
+                          :                  'hover:bg-dark-700/30'
+                        )}
+                      >
+                        <td className="px-4 py-3 text-xs text-slate-500 italic">Situation init.</td>
+                        <td className="px-4 py-3">
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-400 border border-violet-500/20">
+                            Manuel
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-300">{ini.client_name}</td>
+                        <td className="px-4 py-3 text-slate-400 text-xs italic">
+                          {ini.description ?? '—'}
+                        </td>
+                        <td className="px-4 py-3 text-slate-400 whitespace-nowrap text-xs">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {formatDate(ini.since_date)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {isOverdue
+                            ? <span className="text-red-400 text-xs flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> +60 jours</span>
+                            : <span className="text-slate-600 text-xs">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-right font-semibold text-white">{fmt(ini.amount)}</td>
+                        <td className="px-4 py-3 text-center">
+                          {ini.is_settled ? (
+                            <span className="badge-green text-xs">Soldé</span>
+                          ) : isOverdue ? (
+                            <span className="badge-red text-xs">En retard</span>
+                          ) : (
+                            <span className="badge-orange text-xs flex items-center gap-1 justify-center">
+                              <Clock className="w-3 h-3" /> En attente
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {!ini.is_settled && (
+                            <button
+                              onClick={() => settleInitiale(ini.id)}
+                              disabled={saving === ini.id}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                                         bg-emerald-500/10 text-emerald-400 border border-emerald-500/20
+                                         hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              {saving === ini.id ? 'Enreg…' : 'Soldé'}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
                 {/* Total */}
                 <tfoot>
                   <tr className="border-t border-dark-600 bg-dark-800/60">
-                    <td colSpan={6} className="px-4 py-3 text-xs font-medium text-slate-400">
-                      Total non soldé
-                    </td>
+                    <td colSpan={6} className="px-4 py-3 text-xs font-medium text-slate-400">Total non soldé</td>
                     <td className="px-4 py-3 text-right font-bold text-neon-blue">
-                      {fmt(totalCreances)}
+                      {fmt(totalCreances + totalInitiales)}
                     </td>
                     <td colSpan={2} />
                   </tr>
@@ -281,9 +478,7 @@ export default function CreancesPage() {
         {tab === 'dettes' && (
           <div className="overflow-x-auto">
             {loading ? (
-              <div className="flex items-center justify-center py-20 text-slate-500 text-sm">
-                Chargement…
-              </div>
+              <div className="flex items-center justify-center py-20 text-slate-500 text-sm">Chargement…</div>
             ) : filteredDettes.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 gap-3 text-slate-500">
                 <CheckCircle2 className="w-10 h-10 text-emerald-400/40" />
@@ -316,12 +511,11 @@ export default function CreancesPage() {
                     >
                       <td className="px-4 py-3">
                         {d.category_name ? (
-                          <span
-                            className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full"
+                          <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full"
                             style={{
                               background: (d.category_color ?? '#6366f1') + '22',
-                              color:       d.category_color ?? '#6366f1',
-                              border:     `1px solid ${d.category_color ?? '#6366f1'}44`,
+                              color: d.category_color ?? '#6366f1',
+                              border: `1px solid ${d.category_color ?? '#6366f1'}44`,
                             }}
                           >
                             {d.category_name}
@@ -333,10 +527,7 @@ export default function CreancesPage() {
                       <td className="px-4 py-3 text-slate-400">{formatDate(d.expense_date)}</td>
                       <td className="px-4 py-3">
                         {d.credit_due_date ? (
-                          <span className={cn(
-                            'inline-flex items-center gap-1 text-xs font-medium',
-                            d.is_overdue ? 'text-red-400' : 'text-slate-300'
-                          )}>
+                          <span className={cn('inline-flex items-center gap-1 text-xs font-medium', d.is_overdue ? 'text-red-400' : 'text-slate-300')}>
                             {d.is_overdue && <AlertTriangle className="w-3.5 h-3.5" />}
                             {formatDate(d.credit_due_date)}
                           </span>
@@ -364,22 +555,17 @@ export default function CreancesPage() {
                                        hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
                           >
                             <CheckCircle2 className="w-3.5 h-3.5" />
-                            {saving === d.id ? 'Enregistrement…' : 'Marquer soldé'}
+                            {saving === d.id ? 'Enreg…' : 'Soldé'}
                           </button>
                         )}
                       </td>
                     </tr>
                   ))}
                 </tbody>
-                {/* Total */}
                 <tfoot>
                   <tr className="border-t border-dark-600 bg-dark-800/60">
-                    <td colSpan={5} className="px-4 py-3 text-xs font-medium text-slate-400">
-                      Total non soldé
-                    </td>
-                    <td className="px-4 py-3 text-right font-bold text-orange-400">
-                      {fmt(totalDettes)}
-                    </td>
+                    <td colSpan={5} className="px-4 py-3 text-xs font-medium text-slate-400">Total non soldé</td>
+                    <td className="px-4 py-3 text-right font-bold text-orange-400">{fmt(totalDettes)}</td>
                     <td colSpan={2} />
                   </tr>
                 </tfoot>
@@ -398,12 +584,80 @@ export default function CreancesPage() {
           <p className="font-medium text-slate-300">À propos de ce module</p>
           <p>
             Les <span className="text-neon-blue font-medium">créances</span> sont les montants que tes clients te doivent
-            (ventes payées en crédit). Les <span className="text-orange-400 font-medium">dettes</span> sont les montants
-            que tu dois à tes fournisseurs (dépenses en crédit).
-            Clique sur <span className="text-emerald-400 font-medium">Marquer soldé</span> dès que le règlement est effectué.
+            (ventes en crédit). Les <span className="text-orange-400 font-medium">dettes</span> sont les montants que tu dois
+            à tes fournisseurs. Les <span className="text-violet-400 font-medium">créances initiales</span> (bordure violette)
+            permettent de saisir des situations antérieures à l&apos;app.
+            Le bouton <span className="text-neon-blue font-medium">Envoyer rappels mail</span> envoie un email récapitulatif
+            de toutes les créances/dettes en retard.
           </p>
         </div>
       </div>
+
+      {/* ===== MODAL CRÉANCE INITIALE ===== */}
+      {showInitForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          onClick={() => setShowInitForm(false)}
+        >
+          <form onSubmit={handleCreateInitiale}
+            className="card w-full max-w-md p-6 space-y-4"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Mail className="w-5 h-5 text-violet-400" />
+                <h3 className="font-semibold text-slate-200">Saisir une créance initiale</h3>
+              </div>
+              <button type="button" onClick={() => setShowInitForm(false)} className="text-slate-500 hover:text-slate-200">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500 bg-dark-700 rounded-lg p-3">
+              Utilisé pour enregistrer une dette client qui existait avant la mise en service de l&apos;app.
+            </p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="label">Nom du client *</label>
+                <input type="text" className="input" placeholder="Ex: Jean Kouassi"
+                  value={initClient} onChange={e => setInitClient(e.target.value)} required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Montant (FCFA) *</label>
+                  <input type="number" min={1} className="input" placeholder="ex: 150000"
+                    value={initAmount} onChange={e => setInitAmount(e.target.value)} required
+                  />
+                </div>
+                <div>
+                  <label className="label">Depuis le *</label>
+                  <input type="date" className="input" max={localDateStr()}
+                    value={initSince} onChange={e => setInitSince(e.target.value)} required
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="label">Description / Motif</label>
+                <textarea className="input resize-none" rows={2}
+                  placeholder="Ex: Vente téléphone non réglée, dette ancienne…"
+                  value={initDesc} onChange={e => setInitDesc(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-1">
+              <button type="button" onClick={() => setShowInitForm(false)} className="btn-secondary">Annuler</button>
+              <button type="submit" disabled={savingInit || !initClient.trim() || !initAmount}
+                className="btn-primary min-w-32"
+              >
+                {savingInit ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                {savingInit ? 'Enregistrement…' : 'Enregistrer'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

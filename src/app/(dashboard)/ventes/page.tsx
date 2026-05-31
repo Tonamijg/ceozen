@@ -54,6 +54,7 @@ export default function VentesPage() {
   const [clientName,     setClientName]     = useState('');
   const [clientId,       setClientId]       = useState<string | null>(null);
   const [creditDueDate,  setCreditDueDate]  = useState('');
+  const [saleDate,       setSaleDate]       = useState(() => localDateStr());
   const [notes,          setNotes]          = useState('');
   const [saving,         setSaving]         = useState(false);
   const [success,        setSuccess]        = useState('');
@@ -102,7 +103,7 @@ export default function VentesPage() {
     setLoadingSales(true);
     let q = supabase.from('v_sales').select('*').order('created_at', { ascending: false }).limit(100);
     if (filterDate) {
-      q = q.gte('created_at', filterDate + 'T00:00:00').lte('created_at', filterDate + 'T23:59:59');
+      q = q.eq('sale_date', filterDate);
     }
     const { data } = await q;
     setSales((data as VSale[]) ?? []);
@@ -223,6 +224,7 @@ export default function VentesPage() {
       client_name:     clientName || null,
       credit_due_date: paymentMethod === 'credit' ? creditDueDate || null : null,
       is_settled:      paymentMethod !== 'credit',
+      sale_date:       saleDate,
     }).select('id').single();
 
     if (error || !sale) { setSaving(false); return; }
@@ -270,6 +272,7 @@ export default function VentesPage() {
     setClientName('');
     setClientId(null);
     setCreditDueDate('');
+    setSaleDate(localDateStr());
     setPaymentMethod('especes');
     setShowForm(false);
     loadSales();
@@ -590,8 +593,17 @@ export default function VentesPage() {
             </div>
           )}
 
-          {/* Mode de paiement + crédit */}
+          {/* Date de vente + Mode de paiement */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="label">Date de la vente *</label>
+              <input type="date" value={saleDate}
+                onChange={(e) => setSaleDate(e.target.value)}
+                className="input"
+                max={localDateStr()}
+                required
+              />
+            </div>
             <div>
               <label className="label">Mode de paiement *</label>
               <div className="relative">
@@ -730,7 +742,7 @@ export default function VentesPage() {
                         <span className="font-mono text-xs text-neon-blue">{sale.sale_number}</span>
                       </td>
                       <td className="px-5 py-3.5 text-slate-400 text-xs whitespace-nowrap">
-                        {formatDate(sale.created_at)}
+                        {formatDate(sale.sale_date ?? sale.created_at)}
                       </td>
                       <td className="px-5 py-3.5">
                         {sale.client_name

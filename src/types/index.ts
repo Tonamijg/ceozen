@@ -96,6 +96,7 @@ export interface Sale {
   notes?: string;
   credit_due_date?: string;
   is_settled: boolean;
+  sale_date?: string;
   created_at: string;
   items?: SaleItem[];
 }
@@ -174,6 +175,7 @@ export interface VSale {
   item_count: number;
   credit_due_date?: string;
   is_settled: boolean;
+  sale_date?: string;
 }
 
 export interface VStockAlert {

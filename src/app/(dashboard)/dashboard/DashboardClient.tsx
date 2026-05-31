@@ -304,14 +304,6 @@ export default function DashboardClient({
           glow="violet"
         />
         <StatsCard
-          title="CA du mois"
-          value={stats.revenue_month}
-          icon={Wallet}
-          iconColor="text-emerald-400"
-          iconBg="bg-emerald-500/10"
-          glow="green"
-        />
-        <StatsCard
           title={expLabel}
           value={stats.expenses_month}
           icon={Package}
