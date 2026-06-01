@@ -60,6 +60,14 @@ export default function CreancesPage() {
   const [successMsg, setSuccessMsg]       = useState('');
   const [errorMsg, setErrorMsg]           = useState('');
 
+  // ── Confirmation solde ──────────────────────────────────────────────────────
+  type ConfirmAction = {
+    label: string;       // nom du client ou fournisseur
+    amount: number;
+    onConfirm: () => void;
+  };
+  const [confirmSettle, setConfirmSettle] = useState<ConfirmAction | null>(null);
+
   // ── Formulaire créance initiale ─────────────────────────────────────────────
   const [showInitForm,  setShowInitForm]  = useState(false);
   const [initClient,    setInitClient]    = useState('');
@@ -455,7 +463,13 @@ export default function CreancesPage() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         {!c.is_settled && (
-                          <button onClick={() => settleCreance(c.id, c.type)} disabled={saving === c.id}
+                          <button
+                            onClick={() => setConfirmSettle({
+                              label: c.client_name ?? 'Client inconnu',
+                              amount: c.amount,
+                              onConfirm: () => settleCreance(c.id, c.type),
+                            })}
+                            disabled={saving === c.id}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors disabled:opacity-50">
                             <CheckCircle2 className="w-3.5 h-3.5" />
                             {saving === c.id ? 'Enreg…' : 'Soldé'}
@@ -498,7 +512,13 @@ export default function CreancesPage() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           {!ini.is_settled && (
-                            <button onClick={() => settleInitiale(ini.id)} disabled={saving === ini.id}
+                            <button
+                              onClick={() => setConfirmSettle({
+                                label: ini.client_name,
+                                amount: ini.amount,
+                                onConfirm: () => settleInitiale(ini.id),
+                              })}
+                              disabled={saving === ini.id}
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors disabled:opacity-50">
                               <CheckCircle2 className="w-3.5 h-3.5" />
                               {saving === ini.id ? 'Enreg…' : 'Soldé'}
@@ -580,7 +600,13 @@ export default function CreancesPage() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         {!d.is_settled && (
-                          <button onClick={() => settleDette(d.id)} disabled={saving === d.id}
+                          <button
+                            onClick={() => setConfirmSettle({
+                              label: d.supplier_name ?? d.description,
+                              amount: d.amount,
+                              onConfirm: () => settleDette(d.id),
+                            })}
+                            disabled={saving === d.id}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors disabled:opacity-50">
                             <CheckCircle2 className="w-3.5 h-3.5" />
                             {saving === d.id ? 'Enreg…' : 'Soldé'}
@@ -622,7 +648,13 @@ export default function CreancesPage() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           {!di.is_settled && (
-                            <button onClick={() => settleDetteInitiale(di.id)} disabled={saving === di.id}
+                            <button
+                              onClick={() => setConfirmSettle({
+                                label: di.supplier_name,
+                                amount: di.amount,
+                                onConfirm: () => settleDetteInitiale(di.id),
+                              })}
+                              disabled={saving === di.id}
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors disabled:opacity-50">
                               <CheckCircle2 className="w-3.5 h-3.5" />
                               {saving === di.id ? 'Enreg…' : 'Soldé'}
@@ -662,6 +694,50 @@ export default function CreancesPage() {
           </p>
         </div>
       </div>
+
+      {/* ===== MODAL CONFIRMATION SOLDE ===== */}
+      {confirmSettle && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          onClick={() => setConfirmSettle(null)}>
+          <div className="card w-full max-w-sm p-6 space-y-4 border border-emerald-500/20"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center flex-shrink-0">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-200">Confirmer le solde</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Cette action est irréversible</p>
+              </div>
+            </div>
+            <div className="bg-dark-700 rounded-xl p-4 space-y-1.5 text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Concerné</span>
+                <span className="text-slate-200 font-medium">{confirmSettle.label}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Montant soldé</span>
+                <span className="font-bold text-emerald-400">{fmt(confirmSettle.amount)}</span>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 pt-1">
+              <button onClick={() => setConfirmSettle(null)} className="btn-secondary">
+                Annuler
+              </button>
+              <button
+                onClick={() => {
+                  confirmSettle.onConfirm();
+                  setConfirmSettle(null);
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 transition-all"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                Oui, marquer soldé
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ===== MODAL CRÉANCE INITIALE ===== */}
       {showInitForm && (
