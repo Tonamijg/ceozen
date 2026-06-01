@@ -57,6 +57,8 @@ export default function CreancesPage() {
   const [userRole, setUserRole]           = useState('');
   const [sendingReminders, setSendingReminders] = useState(false);
   const [reminderMsg, setReminderMsg]     = useState('');
+  const [successMsg, setSuccessMsg]       = useState('');
+  const [errorMsg, setErrorMsg]           = useState('');
 
   // ── Formulaire créance initiale ─────────────────────────────────────────────
   const [showInitForm,  setShowInitForm]  = useState(false);
@@ -143,18 +145,28 @@ export default function CreancesPage() {
     e.preventDefault();
     if (!initClient.trim() || !initAmount || !initSince) return;
     setSavingInit(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    await supabase.from('creances_initiales').insert({
-      client_name:  initClient.trim(),
-      amount:       Number(initAmount),
-      since_date:   initSince,
-      description:  initDesc.trim() || null,
-      created_by:   user!.id,
-    });
-    setSavingInit(false);
-    setShowInitForm(false);
-    setInitClient(''); setInitAmount(''); setInitSince(localDateStr()); setInitDesc('');
-    loadData();
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error } = await supabase.from('creances_initiales').insert({
+        client_name:  initClient.trim(),
+        amount:       Number(initAmount),
+        since_date:   initSince,
+        description:  initDesc.trim() || null,
+        created_by:   user!.id,
+      });
+      if (error) {
+        setErrorMsg(`Erreur : ${error.message}`);
+        setTimeout(() => setErrorMsg(''), 6000);
+        return;
+      }
+      setShowInitForm(false);
+      setInitClient(''); setInitAmount(''); setInitSince(localDateStr()); setInitDesc('');
+      setSuccessMsg('Créance initiale enregistrée ✅');
+      setTimeout(() => setSuccessMsg(''), 4000);
+      loadData();
+    } finally {
+      setSavingInit(false);
+    }
   }
 
   // ── Créer une dette initiale ────────────────────────────────────────────────
@@ -162,18 +174,28 @@ export default function CreancesPage() {
     e.preventDefault();
     if (!detteInitSupplier.trim() || !detteInitAmount || !detteInitSince) return;
     setSavingDetteInit(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    await supabase.from('dettes_initiales').insert({
-      supplier_name: detteInitSupplier.trim(),
-      amount:        Number(detteInitAmount),
-      since_date:    detteInitSince,
-      description:   detteInitDesc.trim() || null,
-      created_by:    user!.id,
-    });
-    setSavingDetteInit(false);
-    setShowDetteInitForm(false);
-    setDetteInitSupplier(''); setDetteInitAmount(''); setDetteInitSince(localDateStr()); setDetteInitDesc('');
-    loadData();
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error } = await supabase.from('dettes_initiales').insert({
+        supplier_name: detteInitSupplier.trim(),
+        amount:        Number(detteInitAmount),
+        since_date:    detteInitSince,
+        description:   detteInitDesc.trim() || null,
+        created_by:    user!.id,
+      });
+      if (error) {
+        setErrorMsg(`Erreur : ${error.message}`);
+        setTimeout(() => setErrorMsg(''), 6000);
+        return;
+      }
+      setShowDetteInitForm(false);
+      setDetteInitSupplier(''); setDetteInitAmount(''); setDetteInitSince(localDateStr()); setDetteInitDesc('');
+      setSuccessMsg('Dette initiale enregistrée ✅');
+      setTimeout(() => setSuccessMsg(''), 4000);
+      loadData();
+    } finally {
+      setSavingDetteInit(false);
+    }
   }
 
   // ── Envoyer rappels par email ────────────────────────────────────────────────
@@ -231,7 +253,17 @@ export default function CreancesPage() {
   return (
     <div className="space-y-6">
 
-      {/* ── Toast rappels ───────────────────────────────────────────────────── */}
+      {/* ── Toasts ──────────────────────────────────────────────────────────── */}
+      {successMsg && (
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300">
+          {successMsg}
+        </div>
+      )}
+      {errorMsg && (
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl bg-red-500/20 border border-red-500/30 text-red-300">
+          {errorMsg}
+        </div>
+      )}
       {reminderMsg && (
         <div className={cn(
           'fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl',
