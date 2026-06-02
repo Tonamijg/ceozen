@@ -6,7 +6,7 @@ import type { VCreance, VDette } from '@/types';
 import {
   ArrowDownLeft, ArrowUpRight, CheckCircle2, Clock,
   AlertTriangle, RefreshCw, Landmark, Plus, X, Loader2,
-  Mail, Calendar, Send
+  Mail, Calendar, Send, Search, Filter
 } from 'lucide-react';
 import { formatDate, localDateStr } from '@/lib/utils';
 import { cn } from '@/lib/utils';
@@ -54,6 +54,12 @@ export default function CreancesPage() {
   const [loading, setLoading]             = useState(true);
   const [saving, setSaving]               = useState<string | null>(null);
   const [filterSettled, setFilterSettled] = useState(false);
+
+  // ── Recherche & filtres ─────────────────────────────────────────────────────
+  const [search,       setSearch]       = useState('');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'attente' | 'retard'>('all');
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo,   setFilterDateTo]   = useState('');
   const [userRole, setUserRole]           = useState('');
   const [sendingReminders, setSendingReminders] = useState(false);
   const [reminderMsg, setReminderMsg]     = useState('');
@@ -244,10 +250,58 @@ export default function CreancesPage() {
     return (new Date().getTime() - new Date(d.since_date).getTime()) / 86400000 > 60;
   });
 
-  const filteredCreances      = filterSettled ? creances  : creances.filter(c => !c.is_settled);
-  const filteredDettes        = filterSettled ? dettes    : dettes.filter(d => !d.is_settled);
-  const filteredInitiales     = filterSettled ? initiales : initiales.filter(i => !i.is_settled);
-  const filteredDettesInit    = filterSettled ? dettesInit : dettesInit.filter(d => !d.is_settled);
+  // Helpers filtre
+  function applyDateFilter(dateStr: string) {
+    if (!filterDateFrom && !filterDateTo) return true;
+    const d = new Date(dateStr);
+    if (filterDateFrom && d < new Date(filterDateFrom)) return false;
+    if (filterDateTo   && d > new Date(filterDateTo))   return false;
+    return true;
+  }
+
+  const filteredCreances = creances.filter(c => {
+    if (!filterSettled && c.is_settled) return false;
+    if (search && !(c.client_name ?? '').toLowerCase().includes(search.toLowerCase()) &&
+        !(c.reference_number ?? '').toLowerCase().includes(search.toLowerCase())) return false;
+    if (filterStatus === 'retard' && !c.is_overdue) return false;
+    if (filterStatus === 'attente' && (c.is_overdue || c.is_settled)) return false;
+    if (!applyDateFilter(c.created_at)) return false;
+    return true;
+  });
+
+  const filteredInitiales = initiales.filter(i => {
+    if (!filterSettled && i.is_settled) return false;
+    if (search && !i.client_name.toLowerCase().includes(search.toLowerCase()) &&
+        !(i.description ?? '').toLowerCase().includes(search.toLowerCase())) return false;
+    const diffDays = (new Date().getTime() - new Date(i.since_date).getTime()) / 86400000;
+    const isOverdue = !i.is_settled && diffDays > 60;
+    if (filterStatus === 'retard'  && !isOverdue) return false;
+    if (filterStatus === 'attente' && (isOverdue || i.is_settled)) return false;
+    if (!applyDateFilter(i.since_date)) return false;
+    return true;
+  });
+
+  const filteredDettes = dettes.filter(d => {
+    if (!filterSettled && d.is_settled) return false;
+    if (search && !(d.supplier_name ?? '').toLowerCase().includes(search.toLowerCase()) &&
+        !d.description.toLowerCase().includes(search.toLowerCase())) return false;
+    if (filterStatus === 'retard'  && !d.is_overdue) return false;
+    if (filterStatus === 'attente' && (d.is_overdue || d.is_settled)) return false;
+    if (!applyDateFilter(d.expense_date)) return false;
+    return true;
+  });
+
+  const filteredDettesInit = dettesInit.filter(d => {
+    if (!filterSettled && d.is_settled) return false;
+    if (search && !d.supplier_name.toLowerCase().includes(search.toLowerCase()) &&
+        !(d.description ?? '').toLowerCase().includes(search.toLowerCase())) return false;
+    const diffDays = (new Date().getTime() - new Date(d.since_date).getTime()) / 86400000;
+    const isOverdue = !d.is_settled && diffDays > 60;
+    if (filterStatus === 'retard'  && !isOverdue) return false;
+    if (filterStatus === 'attente' && (isOverdue || d.is_settled)) return false;
+    if (!applyDateFilter(d.since_date)) return false;
+    return true;
+  });
 
   const totalCreancesCount = creances.filter(c => !c.is_settled).length + initiales.filter(i => !i.is_settled).length;
   const totalDettesCount   = dettes.filter(d => !d.is_settled).length + dettesInit.filter(d => !d.is_settled).length;
@@ -365,6 +419,94 @@ export default function CreancesPage() {
         </div>
       </div>
 
+      {/* ── Barre recherche + filtres ────────────────────────────────────────── */}
+      <div className="card p-4 space-y-3">
+        {/* Recherche */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+          <input
+            type="text"
+            className="input pl-9"
+            placeholder="Rechercher un client, fournisseur, description…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          {search && (
+            <button onClick={() => setSearch('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-200">
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        {/* Filtres */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-1.5 text-xs text-slate-500">
+            <Filter className="w-3.5 h-3.5" /> Filtres :
+          </div>
+
+          {/* Statut */}
+          <div className="flex rounded-lg overflow-hidden border border-dark-600 text-xs">
+            {(['all', 'attente', 'retard'] as const).map(s => (
+              <button key={s}
+                onClick={() => setFilterStatus(s)}
+                className={cn(
+                  'px-3 py-1.5 transition-colors',
+                  filterStatus === s
+                    ? s === 'retard' ? 'bg-red-500/20 text-red-400'
+                      : s === 'attente' ? 'bg-orange-500/20 text-orange-400'
+                      : 'bg-neon-blue/20 text-neon-blue'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-dark-700'
+                )}
+              >
+                {s === 'all' ? 'Tous' : s === 'attente' ? 'En attente' : 'En retard'}
+              </button>
+            ))}
+          </div>
+
+          {/* Date de */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-slate-500 whitespace-nowrap">Du</span>
+            <input type="date" value={filterDateFrom}
+              onChange={e => setFilterDateFrom(e.target.value)}
+              className="input py-1 text-xs w-36"
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-slate-500 whitespace-nowrap">Au</span>
+            <input type="date" value={filterDateTo}
+              onChange={e => setFilterDateTo(e.target.value)}
+              className="input py-1 text-xs w-36"
+            />
+          </div>
+
+          {/* Afficher soldés */}
+          <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none ml-auto">
+            <input type="checkbox" checked={filterSettled}
+              onChange={e => setFilterSettled(e.target.checked)}
+              className="accent-neon-blue" />
+            Afficher soldés
+          </label>
+
+          {/* Reset */}
+          {(search || filterStatus !== 'all' || filterDateFrom || filterDateTo) && (
+            <button
+              onClick={() => { setSearch(''); setFilterStatus('all'); setFilterDateFrom(''); setFilterDateTo(''); }}
+              className="text-xs text-slate-500 hover:text-red-400 transition-colors underline"
+            >
+              Réinitialiser
+            </button>
+          )}
+        </div>
+
+        {/* Résultats */}
+        <p className="text-xs text-slate-500">
+          {tab === 'creances'
+            ? `${filteredCreances.length + filteredInitiales.length} créance(s) affichée(s)`
+            : `${filteredDettes.length + filteredDettesInit.length} dette(s) affichée(s)`}
+        </p>
+      </div>
+
       {/* ── Onglets ──────────────────────────────────────────────────────────── */}
       <div className="card overflow-hidden">
         <div className="flex items-center justify-between border-b border-dark-600 px-4">
@@ -400,10 +542,6 @@ export default function CreancesPage() {
               )}
             </button>
           </div>
-          <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
-            <input type="checkbox" checked={filterSettled} onChange={e => setFilterSettled(e.target.checked)} className="accent-neon-blue" />
-            Afficher soldés
-          </label>
         </div>
 
         {/* ── CRÉANCES ──────────────────────────────────────────────────────── */}
