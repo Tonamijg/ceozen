@@ -669,8 +669,20 @@ export default function CreancesPage() {
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-dark-600 bg-dark-800/60">
-                    <td colSpan={6} className="px-4 py-3 text-xs font-medium text-slate-400">Total non soldé</td>
-                    <td className="px-4 py-3 text-right font-bold text-neon-blue">{fmt(totalCreances + totalInitiales)}</td>
+                    <td colSpan={6} className="px-4 py-3 text-xs font-medium text-slate-400">
+                      Total affiché
+                      {(search || filterStatus !== 'all' || filterDateFrom || filterDateTo) && (
+                        <span className="ml-2 text-slate-600 font-normal">
+                          (sur {fmt(totalCreances + totalInitiales)} total)
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right font-bold text-neon-blue">
+                      {fmt(
+                        filteredCreances.filter(c => !c.is_settled).reduce((s, c) => s + c.amount, 0) +
+                        filteredInitiales.filter(i => !i.is_settled).reduce((s, i) => s + i.amount, 0)
+                      )}
+                    </td>
                     <td colSpan={2} />
                   </tr>
                 </tfoot>
@@ -805,8 +817,20 @@ export default function CreancesPage() {
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-dark-600 bg-dark-800/60">
-                    <td colSpan={5} className="px-4 py-3 text-xs font-medium text-slate-400">Total non soldé</td>
-                    <td className="px-4 py-3 text-right font-bold text-orange-400">{fmt(totalDettes + totalDettesInit)}</td>
+                    <td colSpan={5} className="px-4 py-3 text-xs font-medium text-slate-400">
+                      Total affiché
+                      {(search || filterStatus !== 'all' || filterDateFrom || filterDateTo) && (
+                        <span className="ml-2 text-slate-600 font-normal">
+                          (sur {fmt(totalDettes + totalDettesInit)} total)
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right font-bold text-orange-400">
+                      {fmt(
+                        filteredDettes.filter(d => !d.is_settled).reduce((s, d) => s + d.amount, 0) +
+                        filteredDettesInit.filter(d => !d.is_settled).reduce((s, d) => s + d.amount, 0)
+                      )}
+                    </td>
                     <td colSpan={2} />
                   </tr>
                 </tfoot>
