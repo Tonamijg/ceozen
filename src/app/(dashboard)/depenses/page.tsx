@@ -168,13 +168,21 @@ export default function DepensesPage() {
       created_by:     user!.id,
     }).select('id').single();
 
+    if (error || !expense) {
+      setSaving(false);
+      // Afficher l'erreur via le toast existant
+      console.error('Erreur dépense:', error?.message);
+      alert(`Erreur lors de l'enregistrement : ${error?.message ?? 'Réponse vide'}`);
+      return;
+    }
+
     // Auto-sauvegarder le fournisseur dans la base s'il est nouveau
     if (supplierName.trim()) {
       await supabase.from('suppliers')
         .upsert({ name: supplierName.trim() }, { onConflict: 'name', ignoreDuplicates: true });
     }
 
-    if (!error && expense && isReappro && reapproLines.length > 0) {
+    if (isReappro && reapproLines.length > 0) {
       await supabase.from('expense_items').insert(
         reapproLines.map(l => ({
           expense_id: expense.id,

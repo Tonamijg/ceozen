@@ -227,7 +227,12 @@ export default function VentesPage() {
       sale_date:       saleDate,
     }).select('id').single();
 
-    if (error || !sale) { setSaving(false); return; }
+    if (error || !sale) {
+      setSaving(false);
+      setError(`Erreur lors de l'enregistrement : ${error?.message ?? 'Réponse vide du serveur'}`);
+      setTimeout(() => setError(''), 8000);
+      return;
+    }
 
     // Auto-sauvegarder le client dans la base s'il est nouveau
     if (clientName && !clientId) {
@@ -235,7 +240,7 @@ export default function VentesPage() {
         .upsert({ name: clientName.trim() }, { onConflict: 'name', ignoreDuplicates: true });
     }
 
-    await supabase.from('sale_items').insert(
+    const { error: itemsError } = await supabase.from('sale_items').insert(
       lines.map(l => ({
         sale_id:    sale.id,
         product_id: l.product.id,
@@ -244,6 +249,13 @@ export default function VentesPage() {
         discount:   l.discount,
       }))
     );
+
+    if (itemsError) {
+      setSaving(false);
+      setError(`Vente créée mais erreur sur les articles : ${itemsError.message}`);
+      setTimeout(() => setError(''), 8000);
+      return;
+    }
 
     // Notification WhatsApp
     const { data: { user: seller } } = await supabase.auth.getUser();
