@@ -10,22 +10,26 @@ import {
   Users, Landmark, ArrowLeftRight, Wallet, ShieldCheck
 } from 'lucide-react';
 
-const ALL_ROLES = ['admin', 'collaborateur', 'super_admin'] as const;
-const ADMIN_ROLES = ['admin', 'super_admin'] as const;
+interface NavItem {
+  label: string;
+  href: string;
+  icon: React.ElementType;
+  minRole: 'all' | 'admin' | 'super_admin';
+}
 
-const NAV_ITEMS = [
-  { label: 'Tableau de bord',  href: '/dashboard',    icon: LayoutDashboard, roles: ALL_ROLES },
-  { label: 'Ventes',           href: '/ventes',        icon: ShoppingCart,    roles: ALL_ROLES },
-  { label: 'Dépenses',         href: '/depenses',      icon: Receipt,         roles: ALL_ROLES },
-  { label: 'Créances & Dettes',href: '/creances',      icon: Landmark,        roles: ALL_ROLES },
-  { label: 'Trocs',            href: '/trocs',         icon: ArrowLeftRight,  roles: ALL_ROLES },
-  { label: 'Stock',            href: '/stock',         icon: Package,         roles: ALL_ROLES },
-  { label: 'Trésorerie',       href: '/tresorerie',    icon: Wallet,          roles: ADMIN_ROLES },
-  { label: 'Rapports',         href: '/rapports',      icon: BarChart3,       roles: ADMIN_ROLES },
-  { label: 'Utilisateurs',     href: '/utilisateurs',  icon: Users,           roles: ADMIN_ROLES },
-  { label: 'Mon profil',       href: '/profil',        icon: User,            roles: ALL_ROLES },
-  { label: 'Super Admin',      href: '/super-admin',   icon: ShieldCheck,     roles: ['super_admin'] as const },
-] as const;
+const NAV_ITEMS: NavItem[] = [
+  { label: 'Tableau de bord',   href: '/dashboard',   icon: LayoutDashboard, minRole: 'all' },
+  { label: 'Ventes',            href: '/ventes',       icon: ShoppingCart,    minRole: 'all' },
+  { label: 'Dépenses',          href: '/depenses',     icon: Receipt,         minRole: 'all' },
+  { label: 'Créances & Dettes', href: '/creances',     icon: Landmark,        minRole: 'all' },
+  { label: 'Trocs',             href: '/trocs',        icon: ArrowLeftRight,  minRole: 'all' },
+  { label: 'Stock',             href: '/stock',        icon: Package,         minRole: 'all' },
+  { label: 'Trésorerie',        href: '/tresorerie',   icon: Wallet,          minRole: 'admin' },
+  { label: 'Rapports',          href: '/rapports',     icon: BarChart3,       minRole: 'admin' },
+  { label: 'Utilisateurs',      href: '/utilisateurs', icon: Users,           minRole: 'admin' },
+  { label: 'Mon profil',        href: '/profil',       icon: User,            minRole: 'all' },
+  { label: 'Super Admin',       href: '/super-admin',  icon: ShieldCheck,     minRole: 'super_admin' },
+];
 
 interface SidebarProps {
   profile: Profile | null;
@@ -38,9 +42,14 @@ export default function Sidebar({ profile, onClose, isOpen, onSignOut }: Sidebar
   const pathname = usePathname();
   const role = profile?.role ?? 'collaborateur';
 
-  const visibleItems = NAV_ITEMS.filter((item) =>
-    (item.roles as readonly string[]).includes(role)
-  );
+  const isSuperAdmin = role === 'super_admin';
+  const isAdmin      = role === 'admin' || isSuperAdmin;
+
+  const visibleItems = NAV_ITEMS.filter((item) => {
+    if (item.minRole === 'super_admin') return isSuperAdmin;
+    if (item.minRole === 'admin')       return isAdmin;
+    return true; // 'all'
+  });
 
   return (
     <>
