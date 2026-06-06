@@ -2,7 +2,7 @@
 // CEOZEN — Types TypeScript centralisés v2
 // ============================================================
 
-export type UserRole          = 'admin' | 'collaborateur';
+export type UserRole          = 'admin' | 'collaborateur' | 'super_admin';
 export type StockMovementType = 'entree' | 'sortie' | 'ajustement';
 export type PaymentMethod     = 'especes' | 'mobile_money' | 'carte' | 'virement' | 'credit';
 

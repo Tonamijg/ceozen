@@ -7,70 +7,24 @@ import type { Profile } from '@/types';
 import {
   LayoutDashboard, ShoppingCart, Receipt, Package,
   BarChart3, User, LogOut, Smartphone, ChevronRight, X,
-  Users, Landmark, ArrowLeftRight, Wallet
+  Users, Landmark, ArrowLeftRight, Wallet, ShieldCheck
 } from 'lucide-react';
 
+const ALL_ROLES = ['admin', 'collaborateur', 'super_admin'] as const;
+const ADMIN_ROLES = ['admin', 'super_admin'] as const;
+
 const NAV_ITEMS = [
-  {
-    label: 'Tableau de bord',
-    href: '/dashboard',
-    icon: LayoutDashboard,
-    roles: ['admin', 'collaborateur'],
-  },
-  {
-    label: 'Ventes',
-    href: '/ventes',
-    icon: ShoppingCart,
-    roles: ['admin', 'collaborateur'],
-  },
-  {
-    label: 'Dépenses',
-    href: '/depenses',
-    icon: Receipt,
-    roles: ['admin', 'collaborateur'],
-  },
-  {
-    label: 'Créances & Dettes',
-    href: '/creances',
-    icon: Landmark,
-    roles: ['admin', 'collaborateur'],
-  },
-  {
-    label: 'Trocs',
-    href: '/trocs',
-    icon: ArrowLeftRight,
-    roles: ['admin', 'collaborateur'],
-  },
-  {
-    label: 'Stock',
-    href: '/stock',
-    icon: Package,
-    roles: ['admin', 'collaborateur'],
-  },
-  {
-    label: 'Trésorerie',
-    href: '/tresorerie',
-    icon: Wallet,
-    roles: ['admin'],
-  },
-  {
-    label: 'Rapports',
-    href: '/rapports',
-    icon: BarChart3,
-    roles: ['admin'],
-  },
-  {
-    label: 'Utilisateurs',
-    href: '/utilisateurs',
-    icon: Users,
-    roles: ['admin'],
-  },
-  {
-    label: 'Mon profil',
-    href: '/profil',
-    icon: User,
-    roles: ['admin', 'collaborateur'],
-  },
+  { label: 'Tableau de bord',  href: '/dashboard',    icon: LayoutDashboard, roles: ALL_ROLES },
+  { label: 'Ventes',           href: '/ventes',        icon: ShoppingCart,    roles: ALL_ROLES },
+  { label: 'Dépenses',         href: '/depenses',      icon: Receipt,         roles: ALL_ROLES },
+  { label: 'Créances & Dettes',href: '/creances',      icon: Landmark,        roles: ALL_ROLES },
+  { label: 'Trocs',            href: '/trocs',         icon: ArrowLeftRight,  roles: ALL_ROLES },
+  { label: 'Stock',            href: '/stock',         icon: Package,         roles: ALL_ROLES },
+  { label: 'Trésorerie',       href: '/tresorerie',    icon: Wallet,          roles: ADMIN_ROLES },
+  { label: 'Rapports',         href: '/rapports',      icon: BarChart3,       roles: ADMIN_ROLES },
+  { label: 'Utilisateurs',     href: '/utilisateurs',  icon: Users,           roles: ADMIN_ROLES },
+  { label: 'Mon profil',       href: '/profil',        icon: User,            roles: ALL_ROLES },
+  { label: 'Super Admin',      href: '/super-admin',   icon: ShieldCheck,     roles: ['super_admin'] as const },
 ] as const;
 
 interface SidebarProps {
@@ -145,9 +99,13 @@ export default function Sidebar({ profile, onClose, isOpen, onSignOut }: Sidebar
                 onClick={onClose}
                 className={cn(
                   'group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150',
-                  active
-                    ? 'bg-neon-blue/15 text-neon-blue border border-neon-blue/20 shadow-[0_0_12px_#00d4ff18]'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-dark-700'
+                  item.href === '/super-admin'
+                    ? active
+                      ? 'bg-yellow-400/15 text-yellow-400 border border-yellow-400/30'
+                      : 'text-yellow-500/70 hover:text-yellow-400 hover:bg-yellow-400/10 border border-yellow-400/10'
+                    : active
+                      ? 'bg-neon-blue/15 text-neon-blue border border-neon-blue/20 shadow-[0_0_12px_#00d4ff18]'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-dark-700'
                 )}
               >
                 <item.icon
@@ -181,9 +139,10 @@ export default function Sidebar({ profile, onClose, isOpen, onSignOut }: Sidebar
                 </p>
                 <span className={cn(
                   'text-[10px] font-semibold uppercase tracking-wide',
+                  profile.role === 'super_admin' ? 'text-yellow-400' :
                   profile.role === 'admin' ? 'text-neon-blue' : 'text-neon-violet'
                 )}>
-                  {profile.role}
+                  {profile.role === 'super_admin' ? '⚡ Super Admin' : profile.role}
                 </span>
               </div>
               <div className="dot-online flex-shrink-0" />

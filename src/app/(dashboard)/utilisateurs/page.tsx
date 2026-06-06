@@ -9,7 +9,7 @@ import {
   CheckCircle2, Edit2, ChevronDown, UserPlus, X, Eye, EyeOff
 } from 'lucide-react';
 
-type UserRole = 'admin' | 'collaborateur';
+type UserRole = 'admin' | 'collaborateur' | 'super_admin';
 
 export default function UtilisateursPage() {
   const supabase = createClient();
@@ -81,7 +81,8 @@ export default function UtilisateursPage() {
     setCreating(false);
   }
 
-  const admins        = profiles.filter((p) => p.role === 'admin');
+  const superAdmins    = profiles.filter((p) => p.role === 'super_admin');
+  const admins         = profiles.filter((p) => p.role === 'admin');
   const collaborateurs = profiles.filter((p) => p.role === 'collaborateur');
 
   return (
@@ -147,6 +148,7 @@ export default function UtilisateursPage() {
                     onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole })}>
                     <option value="collaborateur">Collaborateur</option>
                     <option value="admin">Admin</option>
+                    <option value="super_admin">Super Admin</option>
                   </select>
                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
                 </div>
@@ -180,11 +182,12 @@ export default function UtilisateursPage() {
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         {[
-          { label: 'Total utilisateurs', value: profiles.length,       icon: Users,     color: 'text-neon-blue',   bg: 'bg-neon-blue/10' },
-          { label: 'Administrateurs',    value: admins.length,          icon: Shield,    color: 'text-neon-violet', bg: 'bg-neon-violet/10' },
-          { label: 'Collaborateurs',     value: collaborateurs.length,  icon: UserCheck, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+          { label: 'Total utilisateurs', value: profiles.length,       icon: Users,     color: 'text-neon-blue',    bg: 'bg-neon-blue/10' },
+          { label: 'Super Admins',        value: superAdmins.length,    icon: Shield,    color: 'text-yellow-400',   bg: 'bg-yellow-400/10' },
+          { label: 'Administrateurs',     value: admins.length,         icon: Shield,    color: 'text-neon-violet',  bg: 'bg-neon-violet/10' },
+          { label: 'Collaborateurs',      value: collaborateurs.length, icon: UserCheck, color: 'text-emerald-400',  bg: 'bg-emerald-500/10' },
         ].map((s) => (
           <div key={s.label} className="card p-4">
             <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center mb-3', s.bg)}>
@@ -228,12 +231,13 @@ export default function UtilisateursPage() {
                 {/* Avatar */}
                 <div className={cn(
                   'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 border',
-                  profile.role === 'admin'
-                    ? 'bg-neon-blue/10 border-neon-blue/20'
-                    : 'bg-neon-violet/10 border-neon-violet/20'
+                  profile.role === 'super_admin' ? 'bg-yellow-400/10 border-yellow-400/30' :
+                  profile.role === 'admin' ? 'bg-neon-blue/10 border-neon-blue/20' :
+                  'bg-neon-violet/10 border-neon-violet/20'
                 )}>
                   <span className={cn(
                     'text-sm font-bold',
+                    profile.role === 'super_admin' ? 'text-yellow-400' :
                     profile.role === 'admin' ? 'text-neon-blue' : 'text-neon-violet'
                   )}>
                     {profile.full_name.charAt(0).toUpperCase()}
@@ -265,6 +269,7 @@ export default function UtilisateursPage() {
                         onChange={(e) => setNewRole(e.target.value as UserRole)}
                         className="input text-xs py-1.5 pr-7 appearance-none"
                       >
+                        <option value="super_admin">⚡ Super Admin</option>
                         <option value="admin">Admin</option>
                         <option value="collaborateur">Collaborateur</option>
                       </select>
@@ -279,11 +284,12 @@ export default function UtilisateursPage() {
                   </div>
                 ) : (
                   <div className="flex items-center gap-3">
-                    <span className={cn(
-                      'badge text-xs',
+                    <span className={cn('badge text-xs',
+                      profile.role === 'super_admin' ? 'bg-yellow-400/10 text-yellow-400 border border-yellow-400/20' :
                       profile.role === 'admin' ? 'badge-blue' : 'badge-violet'
                     )}>
-                      {profile.role === 'admin' ? 'Admin' : 'Collaborateur'}
+                      {profile.role === 'super_admin' ? '⚡ Super Admin' :
+                       profile.role === 'admin' ? 'Admin' : 'Collaborateur'}
                     </span>
 
                     {profile.id !== currentId && (
