@@ -33,10 +33,12 @@ export async function POST() {
     { data: creances },
     { data: dettes },
     { data: initiales },
+    { data: dettesInit },
   ] = await Promise.all([
     supabase.from('v_creances').select('*').eq('is_settled', false).order('created_at'),
     supabase.from('v_dettes').select('*').eq('is_settled', false).order('expense_date'),
     supabase.from('creances_initiales').select('*').eq('is_settled', false).order('since_date'),
+    supabase.from('dettes_initiales').select('*').eq('is_settled', false).order('since_date'),
   ]);
 
   const overdueCreances = (creances ?? []).filter((c: Record<string, unknown>) => c.is_overdue);
@@ -46,10 +48,15 @@ export async function POST() {
     const diffDays = (now.getTime() - new Date(i.since_date as string).getTime()) / (1000 * 60 * 60 * 24);
     return diffDays > 60;
   });
+  const overdueDettesInit = (dettesInit ?? []).filter((d: Record<string, unknown>) => {
+    const diffDays = (now.getTime() - new Date(d.since_date as string).getTime()) / (1000 * 60 * 60 * 24);
+    return diffDays > 60;
+  });
 
   const totalCreancesEnRetard = overdueCreances.reduce((s: number, c: Record<string, unknown>) => s + (c.amount as number), 0)
     + overdueInitiales.reduce((s: number, i: Record<string, unknown>) => s + (i.amount as number), 0);
-  const totalDettesEnRetard   = allDettesOverdue.reduce((s: number, d: Record<string, unknown>) => s + (d.amount as number), 0);
+  const totalDettesEnRetard   = allDettesOverdue.reduce((s: number, d: Record<string, unknown>) => s + (d.amount as number), 0)
+    + overdueDettesInit.reduce((s: number, d: Record<string, unknown>) => s + (d.amount as number), 0);
 
   // ── Construire l'email HTML ──────────────────────────────────────────────────
   const rows = (items: Record<string, unknown>[], type: 'creance' | 'dette' | 'initiale') =>
@@ -79,7 +86,7 @@ export async function POST() {
       </tr>`;
     }).join('');
 
-  const hasAnything = overdueCreances.length + overdueInitiales.length + allDettesOverdue.length > 0;
+  const hasAnything = overdueCreances.length + overdueInitiales.length + allDettesOverdue.length + overdueDettesInit.length > 0;
 
   const html = `
 <!DOCTYPE html>
@@ -111,7 +118,7 @@ export async function POST() {
         </tbody>
       </table>` : ''}
 
-      ${allDettesOverdue.length > 0 ? `
+      ${(allDettesOverdue.length + overdueDettesInit.length) > 0 ? `
       <h2 style="font-size:14px;color:#fb923c;margin:28px 0 8px;border-bottom:1px solid #2a2a4a;padding-bottom:8px;">
         ⚠️ Dettes fournisseurs en retard — ${fmt(totalDettesEnRetard)}
       </h2>
@@ -122,7 +129,16 @@ export async function POST() {
           <th style="padding:8px 12px;text-align:left;color:#64748b;font-weight:500;">Échéance</th>
           <th style="padding:8px 12px;text-align:right;color:#64748b;font-weight:500;">Montant</th>
         </tr></thead>
-        <tbody>${rows(allDettesOverdue as Record<string, unknown>[], 'dette')}</tbody>
+        <tbody>
+          ${rows(allDettesOverdue as Record<string, unknown>[], 'dette')}
+          ${overdueDettesInit.map((d: Record<string, unknown>) => `
+            <tr style="border-bottom:1px solid #2a2a3a;">
+              <td style="padding:8px 12px;color:#e2e8f0;">${d.description ?? 'Situation initiale'}</td>
+              <td style="padding:8px 12px;color:#94a3b8;">${d.supplier_name}</td>
+              <td style="padding:8px 12px;color:#f87171;">${formatDate(d.since_date as string)} (+60j)</td>
+              <td style="padding:8px 12px;text-align:right;font-weight:700;color:#fff;">${fmt(d.amount as number)}</td>
+            </tr>`).join('')}
+        </tbody>
       </table>` : ''}
 
       <div style="margin-top:24px;padding:12px;background:#111827;border-radius:10px;font-size:12px;color:#475569;">
@@ -146,7 +162,7 @@ export async function POST() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const count = overdueCreances.length + overdueInitiales.length + allDettesOverdue.length;
+  const count = overdueCreances.length + overdueInitiales.length + allDettesOverdue.length + overdueDettesInit.length;
   return NextResponse.json({
     ok: true,
     message: count > 0

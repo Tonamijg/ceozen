@@ -36,6 +36,8 @@ export default function TrocsPage() {
   const [loading,    setLoading]    = useState(true);
   const [showModal,  setShowModal]  = useState(false);
   const [saving,     setSaving]     = useState(false);
+  const [trocError,  setTrocError]  = useState('');
+  const [trocSuccess,setTrocSuccess]= useState('');
   const [activeTab,  setActiveTab]  = useState<'historique' | 'reprises'>('historique');
 
   // ── Formulaire ────────────────────────────────────────────────────────────
@@ -123,10 +125,12 @@ export default function TrocsPage() {
 
       setShowModal(false);
       resetForm();
+      setTrocSuccess('Troc enregistré avec succès !');
+      setTimeout(() => setTrocSuccess(''), 4000);
       loadData();
     } catch (e) {
-      console.error('Erreur troc:', e);
-      alert(`Erreur : ${e instanceof Error ? e.message : 'Impossible de valider le troc'}`);
+      setTrocError(`Erreur : ${e instanceof Error ? e.message : 'Impossible de valider le troc'}`);
+      setTimeout(() => setTrocError(''), 7000);
     } finally {
       setSaving(false);
     }
@@ -142,6 +146,18 @@ export default function TrocsPage() {
 
   return (
     <div className="space-y-6">
+
+      {/* Toasts */}
+      {trocSuccess && (
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 shadow-xl">
+          <CheckCircle2 className="w-5 h-5" /> {trocSuccess}
+        </div>
+      )}
+      {trocError && (
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-xl bg-red-500/20 border border-red-500/30 text-red-300 shadow-xl">
+          <Package className="w-5 h-5" /> {trocError}
+        </div>
+      )}
 
       {/* ── En-tête ─────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
@@ -281,7 +297,7 @@ export default function TrocsPage() {
                         <p className="text-xs text-slate-500 mt-0.5 ml-5">{fmt(t.product_received_value)}</p>
                       </td>
                       <td className="px-4 py-3 text-right font-bold text-neon-violet">{fmt(t.complement)}</td>
-                      <td className="px-4 py-3 text-slate-400 whitespace-nowrap text-xs">{formatDate(t.created_at)}</td>
+                      <td className="px-4 py-3 text-slate-400 whitespace-nowrap text-xs">{formatDate((t as unknown as Record<string,string>).troc_date ?? t.created_at)}</td>
                       <td className="px-4 py-3 text-center">
                         {t.payment_method === 'credit' && !t.is_settled ? (
                           <span className="badge-red text-xs flex items-center gap-1 justify-center">

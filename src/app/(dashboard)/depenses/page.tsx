@@ -41,6 +41,7 @@ export default function DepensesPage() {
   const [loading,        setLoading]        = useState(true);
   const [saving,         setSaving]         = useState(false);
   const [success,        setSuccess]        = useState(false);
+  const [errorMsg,       setErrorMsg]       = useState('');
   const [userRole,       setUserRole]       = useState('');
   const isAdmin = userRole === 'admin' || userRole === 'super_admin';
   const [confirmDelExp,  setConfirmDelExp]  = useState<ExpenseRow | null>(null);
@@ -171,9 +172,8 @@ export default function DepensesPage() {
 
     if (error || !expense) {
       setSaving(false);
-      // Afficher l'erreur via le toast existant
-      console.error('Erreur dépense:', error?.message);
-      alert(`Erreur lors de l'enregistrement : ${error?.message ?? 'Réponse vide'}`);
+      setErrorMsg(`Erreur : ${error?.message ?? 'Réponse vide du serveur'}`);
+      setTimeout(() => setErrorMsg(''), 7000);
       return;
     }
 
@@ -283,6 +283,12 @@ export default function DepensesPage() {
 
   return (
     <div className="space-y-6">
+      {errorMsg && (
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-xl bg-red-500/20 border border-red-500/30 text-red-300 shadow-xl">
+          <AlertCircle className="w-5 h-5" />
+          {errorMsg}
+        </div>
+      )}
       {success && (
         <div className="fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 shadow-xl">
           <CheckCircle2 className="w-5 h-5" />
