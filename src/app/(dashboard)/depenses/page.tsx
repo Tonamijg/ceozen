@@ -42,6 +42,7 @@ export default function DepensesPage() {
   const [saving,         setSaving]         = useState(false);
   const [success,        setSuccess]        = useState(false);
   const [userRole,       setUserRole]       = useState('');
+  const isAdmin = userRole === 'admin' || userRole === 'super_admin';
   const [confirmDelExp,  setConfirmDelExp]  = useState<ExpenseRow | null>(null);
   const [deletingExpId,  setDeletingExpId]  = useState<string | null>(null);
   const [showDetail,     setShowDetail]     = useState(false);
@@ -629,7 +630,7 @@ export default function DepensesPage() {
                             >
                               <Eye className="w-3.5 h-3.5" />
                             </button>
-                            {userRole === 'admin' && (
+                            {isAdmin && (
                               <button
                                 onClick={() => setConfirmDelExp(e)}
                                 disabled={deletingExpId === e.id}

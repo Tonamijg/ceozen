@@ -80,6 +80,7 @@ export default function VentesPage() {
 
   /* ---- Rôle utilisateur ---- */
   const [userRole,       setUserRole]       = useState<string>('');
+  const isAdmin = userRole === 'admin' || userRole === 'super_admin';
   const [deletingSaleId, setDeletingSaleId] = useState<string | null>(null);
   const [confirmDelete,  setConfirmDelete]  = useState<VSale | null>(null);
 
@@ -799,7 +800,7 @@ export default function VentesPage() {
                           >
                             <RotateCcw className="w-3.5 h-3.5" />
                           </button>
-                          {userRole === 'admin' && (
+                          {isAdmin && (
                             <button
                               onClick={() => setConfirmDelete(sale)}
                               disabled={deletingSaleId === sale.id}

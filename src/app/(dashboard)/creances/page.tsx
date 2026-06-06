@@ -61,6 +61,7 @@ export default function CreancesPage() {
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo,   setFilterDateTo]   = useState('');
   const [userRole, setUserRole]           = useState('');
+  const isAdmin = userRole === 'admin' || userRole === 'super_admin';
   const [sendingReminders, setSendingReminders] = useState(false);
   const [reminderMsg, setReminderMsg]     = useState('');
   const [successMsg, setSuccessMsg]       = useState('');
@@ -354,7 +355,7 @@ export default function CreancesPage() {
           </button>
 
           {/* Bouton contextuel : Créance initiale ou Dette initiale selon l'onglet */}
-          {userRole === 'admin' && (
+          {isAdmin && (
             <button
               onClick={handleAddInitiale}
               className={cn(

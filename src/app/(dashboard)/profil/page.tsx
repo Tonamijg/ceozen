@@ -67,6 +67,7 @@ export default function ProfilPage() {
           <div>
             <p className="font-semibold text-white text-lg">{fullName || '—'}</p>
             <span className={`text-xs font-semibold uppercase tracking-wide ${
+              profile?.role === 'super_admin' ? 'text-yellow-400' :
               profile?.role === 'admin' ? 'text-neon-blue' : 'text-neon-violet'
             }`}>
               {profile?.role ?? '…'}
@@ -100,7 +101,10 @@ export default function ProfilPage() {
             <label className="label">Rôle</label>
             <input
               type="text"
-              value={profile?.role === 'admin' ? 'Administrateur' : 'Collaborateur'}
+              value={
+                profile?.role === 'super_admin' ? '⚡ Super Admin' :
+                profile?.role === 'admin' ? 'Administrateur' : 'Collaborateur'
+              }
               className="input opacity-50 cursor-not-allowed"
               disabled
             />

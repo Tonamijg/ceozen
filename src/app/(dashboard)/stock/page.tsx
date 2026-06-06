@@ -48,7 +48,8 @@ export default function StockPage() {
   const supabase = createClient();
 
   const [tab,        setTab]        = useState<Tab>('stock');
-  const [userRole,   setUserRole]   = useState<'admin' | 'collaborateur'>('collaborateur');
+  const [userRole,   setUserRole]   = useState<string>('collaborateur');
+  const isAdmin = userRole === 'admin' || userRole === 'super_admin';
 
   /* ---- Stock tab ---- */
   const [products,    setProducts]    = useState<VStockAlert[]>([]);
@@ -247,7 +248,7 @@ export default function StockPage() {
     { id: 'mouvements', label: 'Mouvements', icon: BarChart2, adminOnly: true },
   ];
 
-  const visibleTabs = TABS.filter((t) => !t.adminOnly || userRole === 'admin');
+  const visibleTabs = TABS.filter((t) => !t.adminOnly || isAdmin);
 
   return (
     <div className="space-y-6">
@@ -268,7 +269,7 @@ export default function StockPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {userRole === 'admin' && tab === 'catalogue' && (
+          {isAdmin && tab === 'catalogue' && (
             <button onClick={openNewProduct} className="btn-primary">
               <Plus className="w-4 h-4" />
               Nouveau produit
