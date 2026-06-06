@@ -127,9 +127,8 @@ export default function SuperAdminPage() {
     if (!newCatName.trim()) return;
     setCatSaving(true);
     const table = catType === 'produit' ? 'product_categories' : 'expense_categories';
-    const payload = catType === 'produit'
-      ? { name: newCatName.trim() }
-      : { name: newCatName.trim(), color: newCatColor };
+    const payload: Record<string, string> = { name: newCatName.trim() };
+    if (catType === 'depense') payload.color = newCatColor;
     const { error } = await supabase.from(table).insert(payload);
     setCatSaving(false);
     if (!error) { setNewCatName(''); setCatSuccess('Catégorie créée ✅'); setTimeout(() => setCatSuccess(''), 3000); loadAll(); }
