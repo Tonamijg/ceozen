@@ -153,7 +153,7 @@ export default function DashboardClient({
       supabase.from('sales').select('total').gte('created_at', from).lte('created_at', to),
       supabase.from('trocs').select('complement').gte('created_at', from).lte('created_at', to),
       supabase.from('expenses').select('amount').gte('expense_date', fromDate).lte('expense_date', toDate),
-      supabase.from('v_stock_alerts').select('*').eq('is_low_stock', true).order('stock_qty').limit(10),
+      supabase.from('v_stock_alerts').select('*').eq('is_low_stock', true).order('stock_qty'),
       supabase.from('v_sales').select('*').order('created_at', { ascending: false }).limit(20),
       supabase.from('sales').select('total, created_at').gte('created_at', from).lte('created_at', to),
       supabase.from('expenses').select('amount, expense_date').gte('expense_date', fromDate).lte('expense_date', toDate),
@@ -311,6 +311,14 @@ export default function DashboardClient({
           iconBg="bg-orange-500/10"
           glow="orange"
         />
+        <StatsCard
+          title={marginLabel}
+          value={Math.abs(stats.revenue_month - stats.expenses_month)}
+          icon={TrendingUp}
+          iconColor={stats.revenue_month - stats.expenses_month >= 0 ? 'text-emerald-400' : 'text-red-400'}
+          iconBg={stats.revenue_month - stats.expenses_month >= 0 ? 'bg-emerald-500/10' : 'bg-red-500/10'}
+          glow={stats.revenue_month - stats.expenses_month >= 0 ? 'green' : 'orange'}
+        />
       </div>
 
       {/* ── Graphique + alertes stock ────────────────────────────────────────── */}
@@ -324,7 +332,7 @@ export default function DashboardClient({
       </div>
 
       {/* ── Stats bas ────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="card p-5 flex flex-col gap-1">
           <p className="text-xs text-slate-500">Valeur du stock</p>
           <p className="text-xl font-bold text-white">
@@ -339,14 +347,6 @@ export default function DashboardClient({
               <AlertTriangle className="w-4 h-4 text-orange-400" />
             )}
           </div>
-        </div>
-        <div className="card p-5 flex flex-col gap-1">
-          <p className="text-xs text-slate-500">{marginLabel}</p>
-          <p className={`text-xl font-bold ${
-            stats.revenue_month - stats.expenses_month >= 0 ? 'text-emerald-400' : 'text-red-400'
-          }`}>
-            {new Intl.NumberFormat('fr-FR').format(stats.revenue_month - stats.expenses_month)} FCFA
-          </p>
         </div>
       </div>
 

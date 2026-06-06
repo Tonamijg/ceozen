@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     selectedProdId, selectedProdName, selectedProdStock,
     givenPrice,
     receivedName, receivedRef, receivedValue,
-    complement, paymentMethod, creditDueDate, notes,
+    complement, paymentMethod, creditDueDate, trocDate, notes,
     trocNumber,
   } = await req.json();
 
@@ -95,6 +95,7 @@ export async function POST(req: NextRequest) {
       payment_method:          paymentMethod,
       is_settled:              paymentMethod !== 'credit',
       credit_due_date:         paymentMethod === 'credit' && creditDueDate ? creditDueDate : null,
+      troc_date:               trocDate || null,
       notes:                   notes || null,
     });
     if (trocErr) throw new Error(`Troc: ${trocErr.message}`);

@@ -7,7 +7,7 @@ import {
   ArrowLeftRight, Plus, RefreshCw, X, Check,
   CheckCircle2, Smartphone, Clock, Package, Printer
 } from 'lucide-react';
-import { formatDate, cn } from '@/lib/utils';
+import { formatDate, cn, localDateStr } from '@/lib/utils';
 import { printTrocReceipt } from '@/lib/print';
 import { PAYMENT_LABELS } from '@/types';
 
@@ -48,6 +48,7 @@ export default function TrocsPage() {
   const [receivedValue,  setReceivedValue]  = useState('');
   const [paymentMethod,  setPaymentMethod]  = useState<'especes' | 'mobile_money' | 'credit'>('especes');
   const [creditDueDate,  setCreditDueDate]  = useState('');
+  const [trocDate,       setTrocDate]       = useState(() => localDateStr());
   const [notes,          setNotes]          = useState('');
 
   const complement = (parseFloat(givenPrice) || 0) - (parseFloat(receivedValue) || 0);
@@ -72,7 +73,8 @@ export default function TrocsPage() {
     setClientName(''); setClientPhone('');
     setSelectedProd(null); setGivenPrice('');
     setReceivedName(''); setReceivedRef(''); setReceivedValue('');
-    setPaymentMethod('especes'); setCreditDueDate(''); setNotes('');
+    setPaymentMethod('especes'); setCreditDueDate('');
+    setTrocDate(localDateStr()); setNotes('');
   }
 
   // ── Soumission ────────────────────────────────────────────────────────────
@@ -94,7 +96,7 @@ export default function TrocsPage() {
           givenPrice,
           receivedName, receivedRef, receivedValue,
           complement: String(complement),
-          paymentMethod, creditDueDate, notes,
+          paymentMethod, creditDueDate, trocDate, notes,
           trocNumber,
         }),
       });
@@ -559,6 +561,18 @@ export default function TrocsPage() {
                       className="input w-full" />
                   </div>
                 )}
+              </div>
+
+              {/* Date du troc */}
+              <div>
+                <label className="text-xs text-slate-500 mb-1 block">Date du troc *</label>
+                <input
+                  type="date"
+                  value={trocDate}
+                  onChange={e => setTrocDate(e.target.value)}
+                  max={localDateStr()}
+                  className="input"
+                />
               </div>
 
               {/* Notes */}

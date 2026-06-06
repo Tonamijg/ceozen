@@ -53,10 +53,14 @@ export default function RapportsPage() {
   const supabase = createClient();
 
   const now = new Date();
-  const [period, setPeriod] = useState({
-    from: localDateStr(new Date(now.getFullYear(), now.getMonth(), 1)),
-    to:   localDateStr(now),
-  });
+  const defaultFrom = localDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
+  const defaultTo   = localDateStr(now);
+
+  // period = valeur appliquée (déclenche le fetch)
+  // draftPeriod = valeur en cours de saisie (ne déclenche pas de fetch)
+  const [period, setPeriod] = useState({ from: defaultFrom, to: defaultTo });
+  const [draftFrom, setDraftFrom] = useState(defaultFrom);
+  const [draftTo,   setDraftTo]   = useState(defaultTo);
 
   const [loading,        setLoading]        = useState(true);
   const [totalRevenue,   setTotalRevenue]   = useState(0);
@@ -233,19 +237,22 @@ export default function RapportsPage() {
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2 bg-dark-800 border border-dark-600 rounded-xl px-3 py-2">
             <label className="text-xs text-slate-400">Du</label>
-            <input type="date" value={period.from}
-              onChange={(e) => setPeriod((p) => ({ ...p, from: e.target.value }))}
+            <input type="date" value={draftFrom}
+              onChange={(e) => setDraftFrom(e.target.value)}
               className="bg-transparent text-sm text-slate-200 outline-none"
             />
             <label className="text-xs text-slate-400">au</label>
-            <input type="date" value={period.to}
-              onChange={(e) => setPeriod((p) => ({ ...p, to: e.target.value }))}
+            <input type="date" value={draftTo}
+              onChange={(e) => setDraftTo(e.target.value)}
               className="bg-transparent text-sm text-slate-200 outline-none"
             />
           </div>
-          <button onClick={load} className="btn-secondary py-2 text-sm">
+          <button
+            onClick={() => setPeriod({ from: draftFrom, to: draftTo })}
+            className="btn-secondary py-2 text-sm"
+          >
             <RefreshCw className="w-3.5 h-3.5" />
-            Actualiser
+            Appliquer
           </button>
           <button onClick={handleExcelExport} disabled={exporting} className="btn-secondary py-2 text-sm text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10">
             <FileSpreadsheet className="w-3.5 h-3.5" />
