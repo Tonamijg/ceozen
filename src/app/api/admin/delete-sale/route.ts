@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   const { data: callerProfile } = await supabase
     .from('profiles').select('role').eq('id', user.id).single();
 
-  if (callerProfile?.role !== 'admin') {
+  if (!['admin', 'super_admin'].includes(callerProfile?.role ?? '')) {
     return NextResponse.json({ error: 'Accès refusé — réservé aux admins' }, { status: 403 });
   }
 
