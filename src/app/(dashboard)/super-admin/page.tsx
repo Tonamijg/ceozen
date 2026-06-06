@@ -7,11 +7,23 @@ import {
   ShieldCheck, Package, Tag, Terminal,
   Plus, Trash2, Edit2, Check, X, Loader2,
   ChevronDown, AlertTriangle, CheckCircle2, Upload,
-  FileEdit, Search
+  FileEdit, Search, Activity, RefreshCw
 } from 'lucide-react';
+import { formatDateTime } from '@/lib/utils';
 
-type Tab = 'produits' | 'categories' | 'sql' | 'import' | 'edition';
+type Tab = 'produits' | 'categories' | 'edition' | 'audit' | 'sql' | 'import';
 type EditionSub = 'ventes' | 'depenses' | 'creances_init' | 'dettes_init';
+
+interface AuditLog {
+  id: string;
+  table_name: string;
+  operation: string;
+  record_id: string | null;
+  old_data: Record<string, unknown> | null;
+  new_data: Record<string, unknown> | null;
+  user_name: string | null;
+  changed_at: string;
+}
 
 interface EditableSale {
   id: string; sale_number: string; client_name: string | null;
@@ -109,6 +121,14 @@ export default function SuperAdminPage() {
 
   const [edSaving,      setEdSaving]      = useState(false);
 
+  // ── Audit log ────────────────────────────────────────────────────────────────
+  const [auditLogs,     setAuditLogs]     = useState<AuditLog[]>([]);
+  const [auditLoading,  setAuditLoading]  = useState(false);
+  const [auditSearch,   setAuditSearch]   = useState('');
+  const [auditTable,    setAuditTable]    = useState('all');
+  const [auditOp,       setAuditOp]       = useState('all');
+  const [expandedLog,   setExpandedLog]   = useState<string | null>(null);
+
   // ── Toast global ─────────────────────────────────────────────────────────────
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
   function showToast(msg: string, type: 'ok' | 'err' = 'ok') {
@@ -170,6 +190,21 @@ export default function SuperAdminPage() {
   useEffect(() => {
     if (tab === 'edition') loadEdition(edSub);
   }, [tab, edSub, loadEdition]);
+
+  const loadAudit = useCallback(async () => {
+    setAuditLoading(true);
+    const { data } = await supabase
+      .from('audit_logs')
+      .select('*')
+      .order('changed_at', { ascending: false })
+      .limit(500);
+    setAuditLogs((data ?? []) as AuditLog[]);
+    setAuditLoading(false);
+  }, [supabase]);
+
+  useEffect(() => {
+    if (tab === 'audit') loadAudit();
+  }, [tab, loadAudit]);
 
   // ── Sauvegardes édition ─────────────────────────────────────────────────────
   async function saveSale() {
@@ -359,9 +394,31 @@ export default function SuperAdminPage() {
     { key: 'produits',   label: 'Produits',     icon: Package   },
     { key: 'categories', label: 'Catégories',   icon: Tag       },
     { key: 'edition',    label: 'Édition',      icon: FileEdit  },
+    { key: 'audit',      label: 'Audit Log',    icon: Activity  },
     { key: 'sql',        label: 'Console SQL',  icon: Terminal  },
     { key: 'import',     label: 'Import Excel', icon: Upload    },
   ];
+
+  const AUDIT_TABLES = ['all','sales','expenses','products','profiles','creances_initiales','dettes_initiales','trocs'];
+  const AUDIT_OPS    = ['all','INSERT','UPDATE','DELETE'];
+
+  const OP_COLOR: Record<string, string> = {
+    INSERT: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+    UPDATE: 'text-neon-blue  bg-neon-blue/10   border-neon-blue/20',
+    DELETE: 'text-red-400    bg-red-500/10     border-red-500/20',
+  };
+
+  const filteredLogs = auditLogs.filter(l => {
+    if (auditTable !== 'all' && l.table_name !== auditTable) return false;
+    if (auditOp    !== 'all' && l.operation  !== auditOp)    return false;
+    if (auditSearch) {
+      const s = auditSearch.toLowerCase();
+      return (l.user_name ?? '').toLowerCase().includes(s) ||
+             (l.record_id ?? '').toLowerCase().includes(s) ||
+             l.table_name.toLowerCase().includes(s);
+    }
+    return true;
+  });
 
   const ED_SUBS: { key: EditionSub; label: string }[] = [
     { key: 'ventes',        label: 'Ventes' },
@@ -878,6 +935,135 @@ export default function SuperAdminPage() {
             </div>
           )}
 
+        </div>
+      )}
+
+      {/* ══ AUDIT LOG ════════════════════════════════════════════════════════ */}
+      {tab === 'audit' && (
+        <div className="space-y-4">
+
+          {/* Filtres */}
+          <div className="card p-4 space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Recherche */}
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                <input className="input pl-9 text-sm" placeholder="Utilisateur, table, ID..."
+                  value={auditSearch} onChange={e => setAuditSearch(e.target.value)} />
+              </div>
+
+              {/* Filtre table */}
+              <div className="relative">
+                <select className="input text-xs py-2 pr-8 appearance-none"
+                  value={auditTable} onChange={e => setAuditTable(e.target.value)}>
+                  {AUDIT_TABLES.map(t => (
+                    <option key={t} value={t}>{t === 'all' ? 'Toutes les tables' : t}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
+              </div>
+
+              {/* Filtre opération */}
+              <div className="flex rounded-lg overflow-hidden border border-dark-600 text-xs">
+                {AUDIT_OPS.map(op => (
+                  <button key={op} onClick={() => setAuditOp(op)}
+                    className={cn('px-3 py-2 transition-colors',
+                      auditOp === op
+                        ? op === 'INSERT' ? 'bg-emerald-500/20 text-emerald-400'
+                          : op === 'UPDATE' ? 'bg-neon-blue/20 text-neon-blue'
+                          : op === 'DELETE' ? 'bg-red-500/20 text-red-400'
+                          : 'bg-dark-700 text-slate-200'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-dark-700'
+                    )}
+                  >{op === 'all' ? 'Tout' : op}</button>
+                ))}
+              </div>
+
+              <button onClick={loadAudit} disabled={auditLoading}
+                className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-200 transition-colors">
+                <RefreshCw className={cn('w-3.5 h-3.5', auditLoading && 'animate-spin')} />
+                Rafraîchir
+              </button>
+
+              <span className="text-xs text-slate-500 ml-auto">{filteredLogs.length} événement(s)</span>
+            </div>
+          </div>
+
+          {/* Liste */}
+          {auditLoading ? (
+            <div className="card p-8 text-center text-slate-500 text-sm">Chargement…</div>
+          ) : filteredLogs.length === 0 ? (
+            <div className="card p-8 text-center text-slate-500 text-sm">
+              <Activity className="w-8 h-8 mx-auto mb-3 text-slate-600" />
+              Aucun événement trouvé
+            </div>
+          ) : (
+            <div className="card overflow-hidden">
+              <div className="divide-y divide-dark-600/50">
+                {filteredLogs.map(log => (
+                  <div key={log.id}>
+                    {/* Ligne principale */}
+                    <div
+                      className="flex items-center gap-4 px-4 py-3 hover:bg-dark-700/30 transition-colors cursor-pointer"
+                      onClick={() => setExpandedLog(expandedLog === log.id ? null : log.id)}
+                    >
+                      {/* Opération */}
+                      <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded border w-14 text-center flex-shrink-0',
+                        OP_COLOR[log.operation] ?? 'text-slate-400 bg-dark-700 border-dark-600'
+                      )}>
+                        {log.operation}
+                      </span>
+
+                      {/* Table */}
+                      <span className="text-xs font-mono text-neon-violet bg-neon-violet/10 px-2 py-0.5 rounded flex-shrink-0">
+                        {log.table_name}
+                      </span>
+
+                      {/* Utilisateur */}
+                      <span className="text-sm text-slate-300 flex-1 truncate">
+                        {log.user_name ?? <span className="text-slate-600 italic">Système</span>}
+                      </span>
+
+                      {/* Date */}
+                      <span className="text-xs text-slate-500 whitespace-nowrap flex-shrink-0">
+                        {formatDateTime(new Date(log.changed_at))}
+                      </span>
+
+                      {/* Chevron */}
+                      <ChevronDown className={cn('w-3.5 h-3.5 text-slate-600 flex-shrink-0 transition-transform',
+                        expandedLog === log.id && 'rotate-180'
+                      )} />
+                    </div>
+
+                    {/* Détail déroulant */}
+                    {expandedLog === log.id && (
+                      <div className="px-4 pb-4 bg-dark-800/40 space-y-3">
+                        <p className="text-xs text-slate-500">ID enregistrement : <span className="font-mono text-slate-400">{log.record_id ?? '—'}</span></p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {log.old_data && (
+                            <div>
+                              <p className="text-xs font-semibold text-red-400 mb-1">Avant</p>
+                              <pre className="text-[10px] text-slate-400 bg-dark-900 rounded-lg p-3 overflow-x-auto max-h-48">
+                                {JSON.stringify(log.old_data, null, 2)}
+                              </pre>
+                            </div>
+                          )}
+                          {log.new_data && (
+                            <div>
+                              <p className="text-xs font-semibold text-emerald-400 mb-1">Après</p>
+                              <pre className="text-[10px] text-slate-400 bg-dark-900 rounded-lg p-3 overflow-x-auto max-h-48">
+                                {JSON.stringify(log.new_data, null, 2)}
+                              </pre>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
