@@ -2,14 +2,38 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { formatCFA, cn } from '@/lib/utils';
+import { formatCFA, formatDate, cn, localDateStr } from '@/lib/utils';
 import {
-  ShieldCheck, Package, Tag, BarChart2, Terminal,
+  ShieldCheck, Package, Tag, Terminal,
   Plus, Trash2, Edit2, Check, X, Loader2,
-  ChevronDown, AlertTriangle, CheckCircle2, Upload
+  ChevronDown, AlertTriangle, CheckCircle2, Upload,
+  FileEdit, Search
 } from 'lucide-react';
 
-type Tab = 'produits' | 'categories' | 'sql' | 'import';
+type Tab = 'produits' | 'categories' | 'sql' | 'import' | 'edition';
+type EditionSub = 'ventes' | 'depenses' | 'creances_init' | 'dettes_init';
+
+interface EditableSale {
+  id: string; sale_number: string; client_name: string | null;
+  payment_method: string; notes: string | null;
+  sale_date: string; total: number;
+}
+
+interface EditableExpense {
+  id: string; description: string; amount: number;
+  expense_date: string; supplier_name: string | null;
+  payment_method: string; category_name: string | null;
+}
+
+interface EditableCreanceInit {
+  id: string; client_name: string; amount: number;
+  since_date: string; description: string | null; is_settled: boolean;
+}
+
+interface EditableDetteInit {
+  id: string; supplier_name: string; amount: number;
+  since_date: string; description: string | null; is_settled: boolean;
+}
 
 interface Product {
   id: string;
@@ -67,6 +91,24 @@ export default function SuperAdminPage() {
   const [importLog,    setImportLog]    = useState<string[]>([]);
   const [importing,    setImporting]    = useState(false);
 
+  // ── Édition ──────────────────────────────────────────────────────────────────
+  const [edSub,         setEdSub]         = useState<EditionSub>('ventes');
+  const [edSearch,      setEdSearch]      = useState('');
+
+  const [sales,         setSales]         = useState<EditableSale[]>([]);
+  const [editSale,      setEditSale]      = useState<EditableSale | null>(null);
+
+  const [expenses,      setExpenses]      = useState<EditableExpense[]>([]);
+  const [editExpense,   setEditExpense]   = useState<EditableExpense | null>(null);
+
+  const [creancesInit,  setCreancesInit]  = useState<EditableCreanceInit[]>([]);
+  const [editCI,        setEditCI]        = useState<EditableCreanceInit | null>(null);
+
+  const [dettesInit,    setDettesInit]    = useState<EditableDetteInit[]>([]);
+  const [editDI,        setEditDI]        = useState<EditableDetteInit | null>(null);
+
+  const [edSaving,      setEdSaving]      = useState(false);
+
   // ── Toast global ─────────────────────────────────────────────────────────────
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
   function showToast(msg: string, type: 'ok' | 'err' = 'ok') {
@@ -95,6 +137,99 @@ export default function SuperAdminPage() {
   }, [supabase]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  // ── Chargement données édition ───────────────────────────────────────────────
+  const loadEdition = useCallback(async (sub: EditionSub) => {
+    if (sub === 'ventes') {
+      const { data } = await supabase
+        .from('v_sales').select('id,sale_number,client_name,payment_method,notes,sale_date,total')
+        .order('sale_date', { ascending: false }).limit(200);
+      setSales((data ?? []) as EditableSale[]);
+    } else if (sub === 'depenses') {
+      const { data } = await supabase
+        .from('expenses').select('id,description,amount,expense_date,supplier_name,payment_method,category:expense_categories(name)')
+        .order('expense_date', { ascending: false }).limit(200);
+      setExpenses(((data ?? []) as Record<string, unknown>[]).map(e => ({
+        id: e.id as string,
+        description: e.description as string,
+        amount: e.amount as number,
+        expense_date: e.expense_date as string,
+        supplier_name: e.supplier_name as string | null,
+        payment_method: e.payment_method as string,
+        category_name: (Array.isArray(e.category) ? (e.category[0] as { name: string })?.name : (e.category as { name: string } | null)?.name) ?? null,
+      })));
+    } else if (sub === 'creances_init') {
+      const { data } = await supabase.from('creances_initiales').select('*').order('since_date', { ascending: false });
+      setCreancesInit((data ?? []) as EditableCreanceInit[]);
+    } else if (sub === 'dettes_init') {
+      const { data } = await supabase.from('dettes_initiales').select('*').order('since_date', { ascending: false });
+      setDettesInit((data ?? []) as EditableDetteInit[]);
+    }
+  }, [supabase]);
+
+  useEffect(() => {
+    if (tab === 'edition') loadEdition(edSub);
+  }, [tab, edSub, loadEdition]);
+
+  // ── Sauvegardes édition ─────────────────────────────────────────────────────
+  async function saveSale() {
+    if (!editSale) return;
+    setEdSaving(true);
+    const { error } = await supabase.from('sales').update({
+      client_name:    editSale.client_name || null,
+      payment_method: editSale.payment_method,
+      notes:          editSale.notes || null,
+      sale_date:      editSale.sale_date,
+    }).eq('id', editSale.id);
+    setEdSaving(false);
+    if (error) showToast(error.message, 'err');
+    else { showToast('Vente mise à jour ✅'); setEditSale(null); loadEdition('ventes'); }
+  }
+
+  async function saveExpense() {
+    if (!editExpense) return;
+    setEdSaving(true);
+    const { error } = await supabase.from('expenses').update({
+      description:    editExpense.description,
+      amount:         editExpense.amount,
+      expense_date:   editExpense.expense_date,
+      supplier_name:  editExpense.supplier_name || null,
+      payment_method: editExpense.payment_method,
+    }).eq('id', editExpense.id);
+    setEdSaving(false);
+    if (error) showToast(error.message, 'err');
+    else { showToast('Dépense mise à jour ✅'); setEditExpense(null); loadEdition('depenses'); }
+  }
+
+  async function saveCI() {
+    if (!editCI) return;
+    setEdSaving(true);
+    const { error } = await supabase.from('creances_initiales').update({
+      client_name:  editCI.client_name,
+      amount:       editCI.amount,
+      since_date:   editCI.since_date,
+      description:  editCI.description || null,
+      is_settled:   editCI.is_settled,
+    }).eq('id', editCI.id);
+    setEdSaving(false);
+    if (error) showToast(error.message, 'err');
+    else { showToast('Créance mise à jour ✅'); setEditCI(null); loadEdition('creances_init'); }
+  }
+
+  async function saveDI() {
+    if (!editDI) return;
+    setEdSaving(true);
+    const { error } = await supabase.from('dettes_initiales').update({
+      supplier_name: editDI.supplier_name,
+      amount:        editDI.amount,
+      since_date:    editDI.since_date,
+      description:   editDI.description || null,
+      is_settled:    editDI.is_settled,
+    }).eq('id', editDI.id);
+    setEdSaving(false);
+    if (error) showToast(error.message, 'err');
+    else { showToast('Dette mise à jour ✅'); setEditDI(null); loadEdition('dettes_init'); }
+  }
 
   // ── Garde Super Admin ────────────────────────────────────────────────────────
   if (!loading && userRole !== 'super_admin') {
@@ -221,10 +356,18 @@ export default function SuperAdminPage() {
   );
 
   const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
-    { key: 'produits',    label: 'Produits',    icon: Package  },
-    { key: 'categories',  label: 'Catégories',  icon: Tag      },
-    { key: 'sql',         label: 'Console SQL', icon: Terminal },
-    { key: 'import',      label: 'Import Excel',icon: Upload   },
+    { key: 'produits',   label: 'Produits',     icon: Package   },
+    { key: 'categories', label: 'Catégories',   icon: Tag       },
+    { key: 'edition',    label: 'Édition',      icon: FileEdit  },
+    { key: 'sql',        label: 'Console SQL',  icon: Terminal  },
+    { key: 'import',     label: 'Import Excel', icon: Upload    },
+  ];
+
+  const ED_SUBS: { key: EditionSub; label: string }[] = [
+    { key: 'ventes',        label: 'Ventes' },
+    { key: 'depenses',      label: 'Dépenses' },
+    { key: 'creances_init', label: 'Créances initiales' },
+    { key: 'dettes_init',   label: 'Dettes initiales' },
   ];
 
   return (
@@ -471,6 +614,270 @@ export default function SuperAdminPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* ══ ÉDITION ═══════════════════════════════════════════════════════════ */}
+      {tab === 'edition' && (
+        <div className="space-y-4">
+
+          {/* Sous-onglets */}
+          <div className="flex gap-1 flex-wrap">
+            {ED_SUBS.map(s => (
+              <button key={s.key} onClick={() => { setEdSub(s.key); setEdSearch(''); setEditSale(null); setEditExpense(null); setEditCI(null); setEditDI(null); }}
+                className={cn('px-4 py-2 rounded-lg text-xs font-medium transition-all border',
+                  edSub === s.key
+                    ? 'bg-yellow-400/15 text-yellow-400 border-yellow-400/20'
+                    : 'text-slate-400 hover:text-slate-200 bg-dark-800 border-dark-600 hover:bg-dark-700'
+                )}>{s.label}</button>
+            ))}
+          </div>
+
+          {/* Recherche */}
+          <div className="relative max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+            <input className="input pl-9 text-sm" placeholder="Rechercher..."
+              value={edSearch} onChange={e => setEdSearch(e.target.value)} />
+          </div>
+
+          {/* ── Ventes ── */}
+          {edSub === 'ventes' && (
+            <div className="card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-dark-600 text-xs text-slate-500 uppercase">
+                      <th className="px-4 py-3 text-left">N°</th>
+                      <th className="px-4 py-3 text-left">Date</th>
+                      <th className="px-4 py-3 text-left">Client</th>
+                      <th className="px-4 py-3 text-left">Paiement</th>
+                      <th className="px-4 py-3 text-left">Notes</th>
+                      <th className="px-4 py-3 text-right">Total</th>
+                      <th className="px-4 py-3 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-dark-600/50">
+                    {sales.filter(s =>
+                      (s.client_name ?? '').toLowerCase().includes(edSearch.toLowerCase()) ||
+                      s.sale_number.toLowerCase().includes(edSearch.toLowerCase())
+                    ).map(s => (
+                      <tr key={s.id} className="hover:bg-dark-700/30 transition-colors">
+                        <td className="px-4 py-2.5 font-mono text-xs text-neon-blue whitespace-nowrap">{s.sale_number}</td>
+                        {editSale?.id === s.id ? (
+                          <>
+                            <td className="px-4 py-2"><input type="date" className="input text-xs py-1" value={editSale.sale_date} onChange={e => setEditSale({...editSale, sale_date: e.target.value})} /></td>
+                            <td className="px-4 py-2"><input className="input text-xs py-1" value={editSale.client_name ?? ''} onChange={e => setEditSale({...editSale, client_name: e.target.value})} placeholder="Client" /></td>
+                            <td className="px-4 py-2">
+                              <select className="input text-xs py-1" value={editSale.payment_method} onChange={e => setEditSale({...editSale, payment_method: e.target.value})}>
+                                {['especes','mobile_money','carte','virement','credit'].map(v => <option key={v} value={v}>{v}</option>)}
+                              </select>
+                            </td>
+                            <td className="px-4 py-2"><input className="input text-xs py-1" value={editSale.notes ?? ''} onChange={e => setEditSale({...editSale, notes: e.target.value})} placeholder="Notes" /></td>
+                            <td className="px-4 py-2.5 text-right text-slate-400 text-xs">{formatCFA(s.total)}</td>
+                            <td className="px-4 py-2">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button onClick={saveSale} disabled={edSaving} className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20">
+                                  {edSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                                </button>
+                                <button onClick={() => setEditSale(null)} className="p-1.5 rounded-lg bg-dark-700 text-slate-400 hover:text-slate-200"><X className="w-3.5 h-3.5" /></button>
+                              </div>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="px-4 py-2.5 text-slate-400 text-xs whitespace-nowrap">{formatDate(s.sale_date ?? s.id)}</td>
+                            <td className="px-4 py-2.5 text-slate-300">{s.client_name ?? <span className="text-slate-600 italic">—</span>}</td>
+                            <td className="px-4 py-2.5 text-slate-400 text-xs">{s.payment_method}</td>
+                            <td className="px-4 py-2.5 text-slate-500 text-xs truncate max-w-[150px]">{s.notes ?? '—'}</td>
+                            <td className="px-4 py-2.5 text-right font-semibold text-white text-xs">{formatCFA(s.total)}</td>
+                            <td className="px-4 py-2.5 text-center">
+                              <button onClick={() => setEditSale(s)} className="p-1.5 rounded-lg text-slate-500 hover:text-yellow-400 hover:bg-yellow-400/10 transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ── Dépenses ── */}
+          {edSub === 'depenses' && (
+            <div className="card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-dark-600 text-xs text-slate-500 uppercase">
+                      <th className="px-4 py-3 text-left">Date</th>
+                      <th className="px-4 py-3 text-left">Description</th>
+                      <th className="px-4 py-3 text-left">Fournisseur</th>
+                      <th className="px-4 py-3 text-left">Catégorie</th>
+                      <th className="px-4 py-3 text-right">Montant</th>
+                      <th className="px-4 py-3 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-dark-600/50">
+                    {expenses.filter(e =>
+                      e.description.toLowerCase().includes(edSearch.toLowerCase()) ||
+                      (e.supplier_name ?? '').toLowerCase().includes(edSearch.toLowerCase())
+                    ).map(e => (
+                      <tr key={e.id} className="hover:bg-dark-700/30 transition-colors">
+                        {editExpense?.id === e.id ? (
+                          <>
+                            <td className="px-4 py-2"><input type="date" className="input text-xs py-1" value={editExpense.expense_date} max={localDateStr()} onChange={ev => setEditExpense({...editExpense, expense_date: ev.target.value})} /></td>
+                            <td className="px-4 py-2"><input className="input text-xs py-1" value={editExpense.description} onChange={ev => setEditExpense({...editExpense, description: ev.target.value})} /></td>
+                            <td className="px-4 py-2"><input className="input text-xs py-1" value={editExpense.supplier_name ?? ''} onChange={ev => setEditExpense({...editExpense, supplier_name: ev.target.value})} placeholder="Fournisseur" /></td>
+                            <td className="px-4 py-2.5 text-slate-500 text-xs">{e.category_name ?? '—'}</td>
+                            <td className="px-4 py-2"><input type="number" className="input text-xs py-1 w-28 text-right" value={editExpense.amount} onChange={ev => setEditExpense({...editExpense, amount: Number(ev.target.value)})} /></td>
+                            <td className="px-4 py-2">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button onClick={saveExpense} disabled={edSaving} className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20">
+                                  {edSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                                </button>
+                                <button onClick={() => setEditExpense(null)} className="p-1.5 rounded-lg bg-dark-700 text-slate-400 hover:text-slate-200"><X className="w-3.5 h-3.5" /></button>
+                              </div>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="px-4 py-2.5 text-slate-400 text-xs whitespace-nowrap">{formatDate(e.expense_date)}</td>
+                            <td className="px-4 py-2.5 text-slate-300 max-w-[200px] truncate">{e.description}</td>
+                            <td className="px-4 py-2.5 text-slate-400 text-xs">{e.supplier_name ?? '—'}</td>
+                            <td className="px-4 py-2.5 text-xs"><span className="text-slate-500">{e.category_name ?? '—'}</span></td>
+                            <td className="px-4 py-2.5 text-right font-semibold text-white text-xs">{formatCFA(e.amount)}</td>
+                            <td className="px-4 py-2.5 text-center">
+                              <button onClick={() => setEditExpense(e)} className="p-1.5 rounded-lg text-slate-500 hover:text-yellow-400 hover:bg-yellow-400/10 transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ── Créances initiales ── */}
+          {edSub === 'creances_init' && (
+            <div className="card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-dark-600 text-xs text-slate-500 uppercase">
+                      <th className="px-4 py-3 text-left">Client</th>
+                      <th className="px-4 py-3 text-left">Depuis</th>
+                      <th className="px-4 py-3 text-left">Description</th>
+                      <th className="px-4 py-3 text-right">Montant</th>
+                      <th className="px-4 py-3 text-center">Soldé</th>
+                      <th className="px-4 py-3 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-dark-600/50">
+                    {creancesInit.filter(c => c.client_name.toLowerCase().includes(edSearch.toLowerCase())).map(c => (
+                      <tr key={c.id} className="hover:bg-dark-700/30 transition-colors">
+                        {editCI?.id === c.id ? (
+                          <>
+                            <td className="px-4 py-2"><input className="input text-xs py-1" value={editCI.client_name} onChange={e => setEditCI({...editCI, client_name: e.target.value})} /></td>
+                            <td className="px-4 py-2"><input type="date" className="input text-xs py-1" value={editCI.since_date} max={localDateStr()} onChange={e => setEditCI({...editCI, since_date: e.target.value})} /></td>
+                            <td className="px-4 py-2"><input className="input text-xs py-1" value={editCI.description ?? ''} onChange={e => setEditCI({...editCI, description: e.target.value})} placeholder="Description" /></td>
+                            <td className="px-4 py-2"><input type="number" className="input text-xs py-1 w-28 text-right" value={editCI.amount} onChange={e => setEditCI({...editCI, amount: Number(e.target.value)})} /></td>
+                            <td className="px-4 py-2 text-center">
+                              <button onClick={() => setEditCI({...editCI, is_settled: !editCI.is_settled})}
+                                className={cn('text-xs px-2 py-0.5 rounded-full border', editCI.is_settled ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-orange-500/10 text-orange-400 border-orange-500/20')}>
+                                {editCI.is_settled ? 'Oui' : 'Non'}
+                              </button>
+                            </td>
+                            <td className="px-4 py-2">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button onClick={saveCI} disabled={edSaving} className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20">
+                                  {edSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                                </button>
+                                <button onClick={() => setEditCI(null)} className="p-1.5 rounded-lg bg-dark-700 text-slate-400 hover:text-slate-200"><X className="w-3.5 h-3.5" /></button>
+                              </div>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="px-4 py-2.5 text-slate-300 font-medium">{c.client_name}</td>
+                            <td className="px-4 py-2.5 text-slate-400 text-xs">{formatDate(c.since_date)}</td>
+                            <td className="px-4 py-2.5 text-slate-500 text-xs truncate max-w-[200px]">{c.description ?? '—'}</td>
+                            <td className="px-4 py-2.5 text-right font-semibold text-white text-xs">{formatCFA(c.amount)}</td>
+                            <td className="px-4 py-2.5 text-center"><span className={cn('text-xs', c.is_settled ? 'text-emerald-400' : 'text-orange-400')}>{c.is_settled ? '✓' : '✗'}</span></td>
+                            <td className="px-4 py-2.5 text-center">
+                              <button onClick={() => setEditCI(c)} className="p-1.5 rounded-lg text-slate-500 hover:text-yellow-400 hover:bg-yellow-400/10 transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ── Dettes initiales ── */}
+          {edSub === 'dettes_init' && (
+            <div className="card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-dark-600 text-xs text-slate-500 uppercase">
+                      <th className="px-4 py-3 text-left">Fournisseur</th>
+                      <th className="px-4 py-3 text-left">Depuis</th>
+                      <th className="px-4 py-3 text-left">Description</th>
+                      <th className="px-4 py-3 text-right">Montant</th>
+                      <th className="px-4 py-3 text-center">Soldé</th>
+                      <th className="px-4 py-3 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-dark-600/50">
+                    {dettesInit.filter(d => d.supplier_name.toLowerCase().includes(edSearch.toLowerCase())).map(d => (
+                      <tr key={d.id} className="hover:bg-dark-700/30 transition-colors">
+                        {editDI?.id === d.id ? (
+                          <>
+                            <td className="px-4 py-2"><input className="input text-xs py-1" value={editDI.supplier_name} onChange={e => setEditDI({...editDI, supplier_name: e.target.value})} /></td>
+                            <td className="px-4 py-2"><input type="date" className="input text-xs py-1" value={editDI.since_date} max={localDateStr()} onChange={e => setEditDI({...editDI, since_date: e.target.value})} /></td>
+                            <td className="px-4 py-2"><input className="input text-xs py-1" value={editDI.description ?? ''} onChange={e => setEditDI({...editDI, description: e.target.value})} placeholder="Description" /></td>
+                            <td className="px-4 py-2"><input type="number" className="input text-xs py-1 w-28 text-right" value={editDI.amount} onChange={e => setEditDI({...editDI, amount: Number(e.target.value)})} /></td>
+                            <td className="px-4 py-2 text-center">
+                              <button onClick={() => setEditDI({...editDI, is_settled: !editDI.is_settled})}
+                                className={cn('text-xs px-2 py-0.5 rounded-full border', editDI.is_settled ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-orange-500/10 text-orange-400 border-orange-500/20')}>
+                                {editDI.is_settled ? 'Oui' : 'Non'}
+                              </button>
+                            </td>
+                            <td className="px-4 py-2">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button onClick={saveDI} disabled={edSaving} className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20">
+                                  {edSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                                </button>
+                                <button onClick={() => setEditDI(null)} className="p-1.5 rounded-lg bg-dark-700 text-slate-400 hover:text-slate-200"><X className="w-3.5 h-3.5" /></button>
+                              </div>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="px-4 py-2.5 text-slate-300 font-medium">{d.supplier_name}</td>
+                            <td className="px-4 py-2.5 text-slate-400 text-xs">{formatDate(d.since_date)}</td>
+                            <td className="px-4 py-2.5 text-slate-500 text-xs truncate max-w-[200px]">{d.description ?? '—'}</td>
+                            <td className="px-4 py-2.5 text-right font-semibold text-white text-xs">{formatCFA(d.amount)}</td>
+                            <td className="px-4 py-2.5 text-center"><span className={cn('text-xs', d.is_settled ? 'text-emerald-400' : 'text-orange-400')}>{d.is_settled ? '✓' : '✗'}</span></td>
+                            <td className="px-4 py-2.5 text-center">
+                              <button onClick={() => setEditDI(d)} className="p-1.5 rounded-lg text-slate-500 hover:text-yellow-400 hover:bg-yellow-400/10 transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
         </div>
       )}
 
