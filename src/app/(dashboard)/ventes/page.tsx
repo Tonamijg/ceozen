@@ -54,6 +54,7 @@ export default function VentesPage() {
   const [clientName,     setClientName]     = useState('');
   const [clientId,       setClientId]       = useState<string | null>(null);
   const [creditDueDate,  setCreditDueDate]  = useState('');
+  const [acompte,        setAcompte]        = useState(0);
   const [saleDate,       setSaleDate]       = useState(() => localDateStr());
   const [notes,          setNotes]          = useState('');
   const [saving,         setSaving]         = useState(false);
@@ -226,6 +227,7 @@ export default function VentesPage() {
       credit_due_date: paymentMethod === 'credit' ? creditDueDate || null : null,
       is_settled:      paymentMethod !== 'credit',
       sale_date:       saleDate,
+      acompte:         paymentMethod === 'credit' ? acompte : 0,
     }).select('id').single();
 
     if (error || !sale) {
@@ -285,6 +287,7 @@ export default function VentesPage() {
     setClientName('');
     setClientId(null);
     setCreditDueDate('');
+    setAcompte(0);
     setSaleDate(localDateStr());
     setPaymentMethod('especes');
     setShowForm(false);
@@ -644,9 +647,39 @@ export default function VentesPage() {
           </div>
 
           {paymentMethod === 'credit' && (
-            <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-300 text-xs">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              Cette vente sera enregistrée comme créance jusqu&apos;au règlement du client.
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Acompte versé (optionnel)</label>
+                  <input
+                    type="number" min={0} max={total} value={acompte || ''}
+                    onChange={(e) => setAcompte(Math.min(Number(e.target.value) || 0, total))}
+                    placeholder="0"
+                    className="input"
+                  />
+                </div>
+                <div className="flex flex-col justify-end">
+                  <p className="text-xs text-slate-500 mb-1">Solde à recouvrer</p>
+                  <p className={cn(
+                    'text-xl font-bold',
+                    acompte > 0 ? 'text-orange-400' : 'text-white'
+                  )}>
+                    {new Intl.NumberFormat('fr-FR').format(total - acompte)} FCFA
+                  </p>
+                  {acompte > 0 && (
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Acompte : {new Intl.NumberFormat('fr-FR').format(acompte)} FCFA
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-300 text-xs">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                {acompte > 0
+                  ? `Acompte de ${new Intl.NumberFormat('fr-FR').format(acompte)} FCFA reçu — solde de ${new Intl.NumberFormat('fr-FR').format(total - acompte)} FCFA en créance.`
+                  : "Cette vente sera enregistrée comme créance jusqu'au règlement du client."
+                }
+              </div>
             </div>
           )}
 

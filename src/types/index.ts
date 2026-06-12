@@ -97,6 +97,7 @@ export interface Sale {
   credit_due_date?: string;
   is_settled: boolean;
   sale_date?: string;
+  acompte?: number;
   created_at: string;
   items?: SaleItem[];
 }
@@ -176,6 +177,7 @@ export interface VSale {
   credit_due_date?: string;
   is_settled: boolean;
   sale_date?: string;
+  acompte?: number;
 }
 
 export interface VStockAlert {
@@ -196,6 +198,7 @@ export interface VCreance {
   type: 'vente' | 'troc';
   reference_number: string;
   amount: number;
+  acompte?: number;
   created_at: string;
   client_name?: string;
   credit_due_date?: string;

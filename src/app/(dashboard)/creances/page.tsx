@@ -594,7 +594,12 @@ export default function CreancesPage() {
                           </span>
                         ) : <span className="text-slate-600 text-xs">—</span>}
                       </td>
-                      <td className="px-4 py-3 text-right font-semibold text-white">{fmt(c.amount)}</td>
+                      <td className="px-4 py-3 text-right">
+                        <p className="font-semibold text-white">{fmt(c.amount)}</p>
+                        {(c.acompte ?? 0) > 0 && (
+                          <p className="text-xs text-emerald-400 mt-0.5">Acompte : {fmt(c.acompte!)}</p>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-center">
                         {c.is_settled ? <span className="badge-green text-xs">Soldé</span>
                           : c.is_overdue ? <span className="badge-red text-xs">En retard</span>
