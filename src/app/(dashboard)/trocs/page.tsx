@@ -49,6 +49,7 @@ export default function TrocsPage() {
   const [receivedRef,    setReceivedRef]    = useState('');
   const [receivedValue,  setReceivedValue]  = useState('');
   const [paymentMethod,  setPaymentMethod]  = useState<'especes' | 'mobile_money' | 'credit'>('especes');
+  const [acompte,        setAcompte]        = useState('');
   const [creditDueDate,  setCreditDueDate]  = useState('');
   const [trocDate,       setTrocDate]       = useState(() => localDateStr());
   const [notes,          setNotes]          = useState('');
@@ -75,7 +76,7 @@ export default function TrocsPage() {
     setClientName(''); setClientPhone('');
     setSelectedProd(null); setGivenPrice('');
     setReceivedName(''); setReceivedRef(''); setReceivedValue('');
-    setPaymentMethod('especes'); setCreditDueDate('');
+    setPaymentMethod('especes'); setAcompte(''); setCreditDueDate('');
     setTrocDate(localDateStr()); setNotes('');
   }
 
@@ -98,6 +99,7 @@ export default function TrocsPage() {
           givenPrice,
           receivedName, receivedRef, receivedValue,
           complement: String(complement),
+          acompte: acompte || '0',
           paymentMethod, creditDueDate, trocDate, notes,
           trocNumber,
         }),
@@ -558,7 +560,7 @@ export default function TrocsPage() {
                   ] as const).map(({ v, l }) => (
                     <button
                       key={v}
-                      onClick={() => setPaymentMethod(v)}
+                      onClick={() => { setPaymentMethod(v); if (v !== 'credit') setAcompte(''); }}
                       className={cn(
                         'px-3 py-2 rounded-lg text-xs font-medium border transition-all',
                         paymentMethod === v
@@ -570,9 +572,42 @@ export default function TrocsPage() {
                     </button>
                   ))}
                 </div>
-                {paymentMethod === 'credit' && (
+
+                {/* Acompte partiel */}
+                {complement > 0 && (
+                  <div className="mt-3 space-y-3">
+                    <div>
+                      <label className="text-xs text-slate-500 mb-1 block">
+                        Acompte versé (FCFA) <span className="text-slate-600">— laisser vide si paiement intégral</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={acompte}
+                        onChange={e => setAcompte(e.target.value)}
+                        placeholder={`Max : ${fmt(complement)}`}
+                        min={0}
+                        max={complement}
+                        className="input w-full"
+                      />
+                      {acompte && parseFloat(acompte) < complement && (
+                        <p className="text-xs text-orange-400 mt-1">
+                          Solde restant dû : {fmt(complement - parseFloat(acompte))} → ira en créances
+                        </p>
+                      )}
+                    </div>
+                    {(paymentMethod === 'credit' || (acompte && parseFloat(acompte) < complement)) && (
+                      <div>
+                        <label className="text-xs text-slate-500 mb-1 block">Date d&apos;échéance du solde</label>
+                        <input type="date" value={creditDueDate} onChange={e => setCreditDueDate(e.target.value)}
+                          className="input w-full" />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {complement <= 0 && paymentMethod === 'credit' && (
                   <div className="mt-3">
-                    <label className="text-xs text-slate-500 mb-1 block">Date d'échéance</label>
+                    <label className="text-xs text-slate-500 mb-1 block">Date d&apos;échéance</label>
                     <input type="date" value={creditDueDate} onChange={e => setCreditDueDate(e.target.value)}
                       className="input w-full" />
                   </div>

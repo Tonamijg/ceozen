@@ -799,9 +799,13 @@ export default function VentesPage() {
                       <td className="px-5 py-3.5 text-slate-300 text-sm">{sale.seller_name}</td>
                       <td className="px-5 py-3.5 text-slate-400 text-xs">{sale.item_count} art.</td>
                       <td className="px-5 py-3.5">
-                        <span className={cn('badge text-xs', PAYMENT_BADGE_CLASS[sale.payment_method])}>
-                          {PAYMENT_LABELS[sale.payment_method]}
-                        </span>
+                        {sale.payment_method === 'credit' && sale.is_settled ? (
+                          <span className="badge text-xs badge-green">Crédit soldé</span>
+                        ) : (
+                          <span className={cn('badge text-xs', PAYMENT_BADGE_CLASS[sale.payment_method])}>
+                            {PAYMENT_LABELS[sale.payment_method]}
+                          </span>
+                        )}
                         {sale.payment_method === 'credit' && !sale.is_settled && sale.credit_due_date && (
                           <p className="text-[10px] text-orange-400 mt-0.5 whitespace-nowrap">
                             Éch. : {formatDate(sale.credit_due_date)}

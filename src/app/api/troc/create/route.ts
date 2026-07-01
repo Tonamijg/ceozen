@@ -24,9 +24,13 @@ export async function POST(req: NextRequest) {
     selectedProdId, selectedProdName, selectedProdStock,
     givenPrice,
     receivedName, receivedRef, receivedValue,
-    complement, paymentMethod, creditDueDate, trocDate, notes,
+    complement, acompte, paymentMethod, creditDueDate, trocDate, notes,
     trocNumber,
   } = await req.json();
+
+  const complementNum = parseFloat(complement);
+  const acompteNum    = parseFloat(acompte ?? '0') || 0;
+  const isSettled     = acompteNum >= complementNum;
 
   try {
     // 3. Créer le produit repris
@@ -91,10 +95,11 @@ export async function POST(req: NextRequest) {
       product_received_name:   receivedName,
       product_received_ref:    receivedRef || null,
       product_received_value:  parseFloat(receivedValue),
-      complement:              parseFloat(complement),
+      complement:              complementNum,
+      acompte:                 acompteNum,
       payment_method:          paymentMethod,
-      is_settled:              paymentMethod !== 'credit',
-      credit_due_date:         paymentMethod === 'credit' && creditDueDate ? creditDueDate : null,
+      is_settled:              isSettled,
+      credit_due_date:         !isSettled && creditDueDate ? creditDueDate : null,
       troc_date:               trocDate || null,
       notes:                   notes || null,
     });
