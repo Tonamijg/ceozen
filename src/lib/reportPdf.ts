@@ -4,8 +4,13 @@
 
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { formatDate, formatDateTime } from '@/lib/utils';
+import { formatDate } from '@/lib/utils';
 import type { VStockAlert } from '@/types';
+import {
+  MARGIN, PAGE_W, NAVY, MUTED, BLUE, VIOLET, GREEN, RED, ORANGE, LIGHT,
+  fmt, fmtNum, fmtCompact, drawHeader, drawFooter, drawPageNumbers,
+  ensureSpace, sectionTitle, drawKpiBox, emptyStateText, type PdfHeaderMeta,
+} from '@/lib/pdfKit';
 
 interface TopProduct {
   product_name: string;
@@ -42,139 +47,12 @@ export interface ReportPdfData {
   stockSnapshot: VStockAlert[];
 }
 
-const MARGIN = 14;
-const PAGE_W = 210;
-const PAGE_H = 297;
-
-const NAVY: [number, number, number]   = [15, 23, 42];
-const MUTED: [number, number, number]  = [100, 116, 139];
-const BLUE: [number, number, number]   = [3, 105, 161];
-const VIOLET: [number, number, number] = [109, 40, 217];
-const GREEN: [number, number, number]  = [5, 150, 105];
-const RED: [number, number, number]    = [220, 38, 38];
-const ORANGE: [number, number, number] = [217, 119, 6];
-const LIGHT: [number, number, number]  = [241, 245, 249];
-const BORDER: [number, number, number] = [226, 232, 240];
-
-// Intl.NumberFormat('fr-FR') groups digits with a narrow no-break space (U+202F),
-// which the core PDF Helvetica font (WinAnsi encoding) can't render. Group manually
-// with a plain ASCII space instead.
-function fmtNum(n: number): string {
-  const rounded = Math.round(n);
-  const digits = Math.abs(rounded).toString();
-  const grouped = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-  return (rounded < 0 ? '-' : '') + grouped;
-}
-
-function fmt(n: number): string {
-  return fmtNum(n) + ' FCFA';
-}
-
-function fmtCompact(n: number): string {
-  const abs = Math.abs(n);
-  if (abs >= 1_000_000) return (n / 1_000_000).toFixed(1) + ' M FCFA';
-  if (abs >= 1_000) return (n / 1_000).toFixed(0) + ' k FCFA';
-  return fmt(n);
-}
-
-function drawHeader(doc: jsPDF, meta: { periodFrom: string; periodTo: string }) {
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(18);
-  doc.setTextColor(...BLUE);
-  doc.text('CEOZEN', MARGIN, 15);
-
-  doc.setFont('helvetica', 'italic');
-  doc.setFontSize(7.5);
-  doc.setTextColor(...MUTED);
-  doc.text('by Tech big', MARGIN, 20);
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.setTextColor(...NAVY);
-  doc.text('Rapport de gestion', PAGE_W - MARGIN, 13, { align: 'right' });
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(...MUTED);
-  doc.text(
-    `Période : ${formatDate(meta.periodFrom)} au ${formatDate(meta.periodTo)}`,
-    PAGE_W - MARGIN, 18.5, { align: 'right' }
-  );
-
-  doc.setFontSize(7);
-  doc.text(`Généré le ${formatDateTime(new Date())}`, PAGE_W - MARGIN, 23, { align: 'right' });
-
-  doc.setDrawColor(...BORDER);
-  doc.setLineWidth(0.4);
-  doc.line(MARGIN, 26, PAGE_W - MARGIN, 26);
-}
-
-function drawFooter(doc: jsPDF) {
-  const y = PAGE_H - 12;
-  doc.setDrawColor(...BORDER);
-  doc.setLineWidth(0.3);
-  doc.line(MARGIN, y, PAGE_W - MARGIN, y);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.setTextColor(...MUTED);
-  doc.text('CEOZEN — Rapport confidentiel généré automatiquement', MARGIN, y + 5);
-}
-
-function drawPageNumbers(doc: jsPDF) {
-  const total = doc.getNumberOfPages();
-  for (let i = 1; i <= total; i++) {
-    doc.setPage(i);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
-    doc.setTextColor(...MUTED);
-    doc.text(`Page ${i} / ${total}`, PAGE_W - MARGIN, PAGE_H - 7, { align: 'right' });
-  }
-}
-
-function ensureSpace(doc: jsPDF, y: number, needed: number, meta: { periodFrom: string; periodTo: string }): number {
-  if (y + needed > PAGE_H - 20) {
-    doc.addPage();
-    drawHeader(doc, meta);
-    drawFooter(doc);
-    return 32;
-  }
-  return y;
-}
-
-function sectionTitle(doc: jsPDF, text: string, y: number, color: [number, number, number] = NAVY): number {
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.setTextColor(...color);
-  doc.text(text, MARGIN, y);
-  return y + 6;
-}
-
-function drawKpiBox(
-  doc: jsPDF, x: number, y: number, w: number, h: number,
-  label: string, value: string, accent: [number, number, number]
-) {
-  doc.setFillColor(...LIGHT);
-  doc.setDrawColor(...BORDER);
-  doc.setLineWidth(0.3);
-  doc.roundedRect(x, y, w, h, 1.5, 1.5, 'FD');
-
-  doc.setFillColor(...accent);
-  doc.roundedRect(x, y, 1.4, h, 0.7, 0.7, 'F');
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.setTextColor(...MUTED);
-  doc.text(label, x + 5, y + 7);
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11.5);
-  doc.setTextColor(...NAVY);
-  doc.text(value, x + 5, y + 15.5);
-}
-
 export async function generateReportPDF(data: ReportPdfData): Promise<void> {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-  const meta = { periodFrom: data.periodFrom, periodTo: data.periodTo };
+  const meta: PdfHeaderMeta = {
+    title: 'Rapport de gestion',
+    subtitle: `Période : ${formatDate(data.periodFrom)} au ${formatDate(data.periodTo)}`,
+  };
 
   drawHeader(doc, meta);
   drawFooter(doc);
@@ -232,11 +110,7 @@ export async function generateReportPDF(data: ReportPdfData): Promise<void> {
     });
     y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
   } else {
-    doc.setFont('helvetica', 'italic');
-    doc.setFontSize(9);
-    doc.setTextColor(...MUTED);
-    doc.text('Aucune vente sur la période.', MARGIN, y + 2);
-    y += 10;
+    y = emptyStateText(doc, 'Aucune vente sur la période.', y);
   }
 
   // ── Dépenses par catégorie ────────────────────────────────
@@ -264,11 +138,7 @@ export async function generateReportPDF(data: ReportPdfData): Promise<void> {
     });
     y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
   } else {
-    doc.setFont('helvetica', 'italic');
-    doc.setFontSize(9);
-    doc.setTextColor(...MUTED);
-    doc.text('Aucune dépense sur la période.', MARGIN, y + 2);
-    y += 10;
+    y = emptyStateText(doc, 'Aucune dépense sur la période.', y);
   }
 
   // ── Performance par vendeur ───────────────────────────────
@@ -293,11 +163,7 @@ export async function generateReportPDF(data: ReportPdfData): Promise<void> {
     });
     y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
   } else {
-    doc.setFont('helvetica', 'italic');
-    doc.setFontSize(9);
-    doc.setTextColor(...MUTED);
-    doc.text('Aucune vente sur la période.', MARGIN, y + 2);
-    y += 10;
+    y = emptyStateText(doc, 'Aucune vente sur la période.', y);
   }
 
   // ── État du stock ─────────────────────────────────────────
@@ -334,10 +200,7 @@ export async function generateReportPDF(data: ReportPdfData): Promise<void> {
       didDrawPage: () => { drawHeader(doc, meta); drawFooter(doc); },
     });
   } else {
-    doc.setFont('helvetica', 'italic');
-    doc.setFontSize(9);
-    doc.setTextColor(...MUTED);
-    doc.text('Aucun produit en stock.', MARGIN, y + 2);
+    emptyStateText(doc, 'Aucun produit en stock.', y);
   }
 
   drawPageNumbers(doc);

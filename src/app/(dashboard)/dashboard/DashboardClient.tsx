@@ -9,11 +9,12 @@ import SalesChart   from '@/components/dashboard/SalesChart';
 import type { DashboardStats, VStockAlert, VSale } from '@/types';
 import {
   TrendingUp, ShoppingBag, Package, AlertTriangle,
-  Wallet, RefreshCw, Calendar, Banknote, Smartphone, Building2, ArrowRight
+  Wallet, RefreshCw, Calendar, Banknote, Smartphone, Building2, ArrowRight, FileDown
 } from 'lucide-react';
 import Link from 'next/link';
 import { formatDateTime } from '@/lib/utils';
 import { cn } from '@/lib/utils';
+import type { DailyReportData, DailySaleRow, DailyCreditRow } from '@/lib/dailyReportPdf';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ChartData { date: string; revenue: number; expenses: number; }
@@ -135,6 +136,7 @@ export default function DashboardClient({
   const [pulse,      setPulse]      = useState(false);
   const [loadingP,   setLoadingP]   = useState(false);
   const [treasury,   setTreasury]   = useState<{ name: string; type: string; solde: number }[]>([]);
+  const [exportingDaily, setExportingDaily] = useState(false);
 
   // ── Fetches stats for a given period ────────────────────────────────────────
   const fetchPeriodStats = useCallback(async (p: Period) => {
@@ -219,6 +221,182 @@ export default function DashboardClient({
     fetchPeriodStats(period);
   }, [period, fetchPeriodStats]);
 
+  // ── Rapport journalier (PDF) ─────────────────────────────────────────────────
+  const handleDailyReport = useCallback(async () => {
+    setExportingDaily(true);
+    try {
+      const now      = new Date();
+      const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const dateStr  = localDateStr(now);
+      const fromIso  = dayStart.toISOString();
+      const toIso    = now.toISOString();
+
+      const [
+        { data: todaySales },
+        { data: todayAvoirs },
+        { data: todayTrocs },
+        { data: todayExpenses },
+        { data: treasuryAccs },
+        { data: allSales },
+        { data: allExpenses },
+        { data: allApports },
+        { data: allAvoirsAll },
+        { data: stockAlerts },
+      ] = await Promise.all([
+        supabase.from('v_sales').select('*').gte('created_at', fromIso).lte('created_at', toIso).order('created_at'),
+        supabase.from('sale_avoirs').select('id, avoir_number, total, created_at, sale:sales(sale_number, client_name)')
+          .gte('created_at', fromIso).lte('created_at', toIso),
+        supabase.from('trocs').select('*').gte('created_at', fromIso).lte('created_at', toIso).order('created_at'),
+        supabase.from('expenses').select('*, category:expense_categories(name)').eq('expense_date', dateStr).order('created_at'),
+        supabase.from('treasury_accounts').select('id,name,type,payment_keys,initial_balance'),
+        supabase.from('sales').select('total,payment_method,created_at').neq('payment_method', 'credit'),
+        supabase.from('expenses').select('amount,payment_method,expense_date'),
+        supabase.from('treasury_apports').select('amount,account_id,date'),
+        supabase.from('sale_avoirs').select('total,created_at,sale:sales(payment_method)'),
+        supabase.from('v_stock_alerts').select('*').eq('is_low_stock', true).order('stock_qty'),
+      ]);
+
+      // ── Ventes + avoirs fusionnés ──────────────────────────────────────────
+      const salesRows: DailySaleRow[] = (todaySales ?? []).map((s: Record<string, unknown>) => ({
+        created_at:     s.created_at as string,
+        sale_number:    s.sale_number as string,
+        client_name:    s.client_name as string | null,
+        seller_name:    s.seller_name as string,
+        payment_method: s.payment_method as string,
+        total:          s.total as number,
+      }));
+      const avoirRows: DailySaleRow[] = (todayAvoirs ?? []).map((a: Record<string, unknown>) => {
+        const sale = Array.isArray(a.sale) ? a.sale[0] : a.sale as Record<string, unknown> | null;
+        return {
+          created_at:     a.created_at as string,
+          sale_number:    a.avoir_number as string,
+          client_name:    (sale?.client_name ?? null) as string | null,
+          seller_name:    '—',
+          payment_method: '—',
+          total:          a.total as number,
+          is_avoir:       true,
+        };
+      });
+      const allSalesRows = [...salesRows, ...avoirRows].sort((a, b) => a.created_at.localeCompare(b.created_at));
+
+      const revenue      = salesRows.reduce((s, x) => s + x.total, 0) - avoirRows.reduce((s, x) => s + x.total, 0);
+      const salesCount   = salesRows.length;
+      const avgSale      = salesCount ? salesRows.reduce((s, x) => s + x.total, 0) / salesCount : 0;
+      const trocsRevenue = (todayTrocs ?? []).reduce((s, t) => s + (t.complement ?? 0), 0);
+      const expensesTotal = (todayExpenses ?? []).reduce((s: number, e: Record<string, unknown>) => s + ((e.amount as number) ?? 0), 0);
+
+      // ── Dépenses du jour ───────────────────────────────────────────────────
+      const dailyExpenses = (todayExpenses ?? []).map((e: Record<string, unknown>) => {
+        const cat = Array.isArray(e.category) ? e.category[0] : e.category as Record<string, unknown> | null;
+        return {
+          created_at:     e.created_at as string,
+          category_name:  (cat?.name ?? 'Autre') as string,
+          description:    e.description as string,
+          amount:         e.amount as number,
+          payment_method: e.payment_method as string,
+        };
+      });
+
+      // ── Trocs du jour ──────────────────────────────────────────────────────
+      const trocRows = (todayTrocs ?? []).map((t: Record<string, unknown>) => ({
+        created_at:              t.created_at as string,
+        troc_number:             t.troc_number as string,
+        client_name:             t.client_name as string | null,
+        product_given_name:      t.product_given_name as string,
+        product_received_name:   t.product_received_name as string,
+        complement:              t.complement as number,
+        payment_method:          t.payment_method as string,
+      }));
+
+      // ── Nouvelles créances / dettes du jour ────────────────────────────────
+      const newCredits: DailyCreditRow[] = [
+        ...salesRows.filter(s => s.payment_method === 'credit').map((s) => ({
+          type: 'Créance' as const, reference: s.sale_number, party: s.client_name || 'Anonyme', amount: s.total,
+        })),
+        ...trocRows.filter(t => t.payment_method === 'credit').map((t) => ({
+          type: 'Créance' as const, reference: t.troc_number, party: t.client_name || 'Anonyme', amount: t.complement,
+        })),
+        ...(todayExpenses ?? [])
+          .filter((e: Record<string, unknown>) => e.payment_method === 'credit')
+          .map((e: Record<string, unknown>) => ({
+            type: 'Dette' as const,
+            reference: e.description as string,
+            party: (e.supplier_name as string) || '—',
+            amount: e.amount as number,
+            due_date: e.credit_due_date as string | undefined,
+          })),
+      ];
+
+      // ── Réconciliation trésorerie ──────────────────────────────────────────
+      const treasuryRows = (treasuryAccs ?? []).map((acc: Record<string, unknown>) => {
+        const keys = acc.payment_keys as string[];
+        let beforeEntrees = 0, beforeSorties = 0, duringEntrees = 0, duringSorties = 0;
+
+        (allSales ?? []).forEach((s: Record<string, unknown>) => {
+          if (!keys.includes(s.payment_method as string)) return;
+          const dt = s.created_at as string;
+          if (dt >= fromIso && dt <= toIso) duringEntrees += (s.total as number) ?? 0;
+          else if (dt < fromIso) beforeEntrees += (s.total as number) ?? 0;
+        });
+        (allExpenses ?? []).forEach((e: Record<string, unknown>) => {
+          if (!keys.includes(e.payment_method as string)) return;
+          const dt = (e.expense_date as string) + 'T00:00:00.000Z';
+          if (dt >= fromIso && dt <= toIso) duringSorties += (e.amount as number) ?? 0;
+          else if (dt < fromIso) beforeSorties += (e.amount as number) ?? 0;
+        });
+        (allAvoirsAll ?? []).forEach((av: Record<string, unknown>) => {
+          const pm = (av.sale as Record<string, unknown> | null)?.payment_method as string;
+          if (!pm || !keys.includes(pm)) return;
+          const dt = av.created_at as string;
+          if (dt >= fromIso && dt <= toIso) duringSorties += (av.total as number) ?? 0;
+          else if (dt < fromIso) beforeSorties += (av.total as number) ?? 0;
+        });
+        (allApports ?? []).forEach((ap: Record<string, unknown>) => {
+          if (ap.account_id !== acc.id) return;
+          const dt = (ap.date as string) + 'T00:00:00.000Z';
+          if (dt >= fromIso && dt <= toIso) duringEntrees += (ap.amount as number) ?? 0;
+          else if (dt < fromIso) beforeEntrees += (ap.amount as number) ?? 0;
+        });
+
+        const soldeDebut = (acc.initial_balance as number) + beforeEntrees - beforeSorties;
+        const soldeFin    = soldeDebut + duringEntrees - duringSorties;
+        return { name: acc.name as string, soldeDebut, entrees: duringEntrees, sorties: duringSorties, soldeFin };
+      });
+
+      // ── Performance vendeurs du jour ───────────────────────────────────────
+      const sellerMap: Record<string, { seller_name: string; sale_count: number; total_revenue: number }> = {};
+      salesRows.forEach((s) => {
+        if (!sellerMap[s.seller_name]) sellerMap[s.seller_name] = { seller_name: s.seller_name, sale_count: 0, total_revenue: 0 };
+        sellerMap[s.seller_name].sale_count++;
+        sellerMap[s.seller_name].total_revenue += s.total;
+      });
+
+      const reportData: DailyReportData = {
+        date: dateStr,
+        revenue,
+        expenses: expensesTotal,
+        salesCount,
+        avgSale,
+        trocsCount: (todayTrocs ?? []).length,
+        trocsRevenue,
+        sales: allSalesRows,
+        trocs: trocRows,
+        dailyExpenses,
+        treasury: treasuryRows,
+        newCredits,
+        stockAlerts: (stockAlerts ?? []).map((p: VStockAlert) => ({
+          reference: p.reference, name: p.name, stock_qty: p.stock_qty, stock_min: p.stock_min,
+        })),
+        sellerStats: Object.values(sellerMap).sort((a, b) => b.total_revenue - a.total_revenue),
+      };
+
+      const { generateDailyReportPDF } = await import('@/lib/dailyReportPdf');
+      await generateDailyReportPDF(reportData);
+    } finally {
+      setExportingDaily(false);
+    }
+  }, [supabase]);
+
   // ── Supabase Realtime ────────────────────────────────────────────────────────
   useEffect(() => {
     const channel = supabase
@@ -280,6 +458,14 @@ export default function DashboardClient({
           >
             <RefreshCw className={cn('w-3.5 h-3.5', loadingP && 'animate-spin')} />
             Rafraîchir
+          </button>
+          <button
+            onClick={handleDailyReport}
+            disabled={exportingDaily}
+            className="btn-secondary py-1.5 text-xs ml-1"
+          >
+            <FileDown className="w-3.5 h-3.5" />
+            {exportingDaily ? 'Génération…' : 'Rapport du jour'}
           </button>
         </div>
       </div>
