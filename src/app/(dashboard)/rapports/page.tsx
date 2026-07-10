@@ -74,6 +74,7 @@ export default function RapportsPage() {
   const [stockSnapshot,  setStockSnapshot]  = useState<VStockAlert[]>([]);
   const [expensesByCat,  setExpensesByCat]  = useState<ExpenseByCat[]>([]);
   const [exporting,      setExporting]      = useState(false);
+  const [exportingPdf,   setExportingPdf]   = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -223,8 +224,34 @@ export default function RapportsPage() {
     }
   }
 
+  // Export PDF
+  async function handlePdfExport() {
+    setExportingPdf(true);
+    try {
+      const { generateReportPDF } = await import('@/lib/reportPdf');
+      await generateReportPDF({
+        periodFrom: period.from,
+        periodTo: period.to,
+        totalRevenue,
+        totalExpenses,
+        margin,
+        salesCount,
+        avgSale,
+        trocsCount,
+        trocsRevenue,
+        totalStockValue,
+        topProducts,
+        sellerStats,
+        expensesByCat,
+        stockSnapshot,
+      });
+    } finally {
+      setExportingPdf(false);
+    }
+  }
+
   return (
-    <div className="space-y-6" id="rapport-print">
+    <div className="space-y-6">
       {/* En-tête */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -258,9 +285,9 @@ export default function RapportsPage() {
             <FileSpreadsheet className="w-3.5 h-3.5" />
             {exporting ? 'Export…' : 'Excel'}
           </button>
-          <button onClick={() => window.print()} className="btn-primary py-2 text-sm">
+          <button onClick={handlePdfExport} disabled={exportingPdf} className="btn-primary py-2 text-sm">
             <Printer className="w-3.5 h-3.5" />
-            PDF
+            {exportingPdf ? 'Génération…' : 'PDF'}
           </button>
         </div>
       </div>
@@ -500,15 +527,6 @@ export default function RapportsPage() {
           </table>
         </div>
       </div>
-
-      {/* Styles print */}
-      <style>{`
-        @media print {
-          .btn-primary, .btn-secondary, [data-no-print] { display: none !important; }
-          body { background: white; color: black; }
-          .card { border: 1px solid #e5e7eb !important; background: white !important; }
-        }
-      `}</style>
     </div>
   );
 }
