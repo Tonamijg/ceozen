@@ -63,13 +63,6 @@ export interface DailyCreditRow {
   due_date?: string | null;
 }
 
-export interface DailyStockAlertRow {
-  reference: string;
-  name: string;
-  stock_qty: number;
-  stock_min: number;
-}
-
 export interface DailySellerRow {
   seller_name: string;
   sale_count: number;
@@ -89,7 +82,6 @@ export interface DailyReportData {
   dailyExpenses: DailyExpenseRow[];
   treasury: DailyTreasuryRow[];
   newCredits: DailyCreditRow[];
-  stockAlerts: DailyStockAlertRow[];
   sellerStats: DailySellerRow[];
 }
 
@@ -293,42 +285,6 @@ export async function generateDailyReportPDF(data: DailyReportData): Promise<voi
     y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
   } else {
     y = emptyStateText(doc, 'Aucune nouvelle créance ou dette aujourd\'hui.', y);
-  }
-
-  // ── Alertes stock ─────────────────────────────────────────
-  y = ensureSpace(doc, y, 20, meta);
-  y = sectionTitle(doc, 'Alertes stock', y, ORANGE);
-
-  if (data.stockAlerts.length) {
-    autoTable(doc, {
-      startY: y,
-      margin: { top: 30, left: MARGIN, right: MARGIN },
-      head: [['Référence', 'Produit', 'Qté en stock', 'Seuil min', 'Statut']],
-      body: data.stockAlerts.map((p) => [
-        p.reference, p.name, String(p.stock_qty), String(p.stock_min),
-        p.stock_qty === 0 ? 'Rupture' : 'Stock bas',
-      ]),
-      theme: 'plain',
-      styles: { fontSize: 8.5, textColor: NAVY, cellPadding: 2.2 },
-      headStyles: { fillColor: ORANGE, textColor: 255, fontStyle: 'bold' },
-      alternateRowStyles: { fillColor: LIGHT },
-      columnStyles: {
-        2: { cellWidth: 26, halign: 'center' },
-        3: { cellWidth: 26, halign: 'center' },
-        4: { cellWidth: 26, halign: 'center' },
-      },
-      didParseCell: (hookData) => {
-        if (hookData.section === 'body' && hookData.column.index === 4) {
-          const v = hookData.cell.raw as string;
-          hookData.cell.styles.fontStyle = 'bold';
-          hookData.cell.styles.textColor = v === 'Rupture' ? RED : ORANGE;
-        }
-      },
-      didDrawPage: () => { drawHeader(doc, meta); drawFooter(doc); },
-    });
-    y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
-  } else {
-    y = emptyStateText(doc, 'Aucune alerte stock.', y);
   }
 
   // ── Performance vendeurs du jour ──────────────────────────

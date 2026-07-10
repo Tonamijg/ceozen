@@ -241,7 +241,6 @@ export default function DashboardClient({
         { data: allExpenses },
         { data: allApports },
         { data: allAvoirsAll },
-        { data: stockAlerts },
       ] = await Promise.all([
         supabase.from('v_sales').select('*').gte('created_at', fromIso).lte('created_at', toIso).order('created_at'),
         supabase.from('sale_avoirs').select('id, avoir_number, total, created_at, sale:sales(sale_number, client_name)')
@@ -253,7 +252,6 @@ export default function DashboardClient({
         supabase.from('expenses').select('amount,payment_method,expense_date'),
         supabase.from('treasury_apports').select('amount,account_id,date'),
         supabase.from('sale_avoirs').select('total,created_at,sale:sales(payment_method)'),
-        supabase.from('v_stock_alerts').select('*').eq('is_low_stock', true).order('stock_qty'),
       ]);
 
       // ── Ventes + avoirs fusionnés ──────────────────────────────────────────
@@ -384,9 +382,6 @@ export default function DashboardClient({
         dailyExpenses,
         treasury: treasuryRows,
         newCredits,
-        stockAlerts: (stockAlerts ?? []).map((p: VStockAlert) => ({
-          reference: p.reference, name: p.name, stock_qty: p.stock_qty, stock_min: p.stock_min,
-        })),
         sellerStats: Object.values(sellerMap).sort((a, b) => b.total_revenue - a.total_revenue),
       };
 
