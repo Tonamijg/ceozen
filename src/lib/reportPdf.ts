@@ -9,7 +9,8 @@ import type { VStockAlert } from '@/types';
 import {
   MARGIN, PAGE_W, NAVY, MUTED, BLUE, VIOLET, GREEN, RED, ORANGE, LIGHT,
   fmt, fmtNum, fmtCompact, drawHeader, drawFooter, drawPageNumbers,
-  ensureSpace, sectionTitle, drawKpiBox, emptyStateText, type PdfHeaderMeta,
+  ensureSpace, sectionTitle, drawKpiBox, emptyStateText, loadKtechLogoDataUrl,
+  type PdfHeaderMeta,
 } from '@/lib/pdfKit';
 
 interface TopProduct {
@@ -49,9 +50,11 @@ export interface ReportPdfData {
 
 export async function generateReportPDF(data: ReportPdfData): Promise<void> {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const logo = await loadKtechLogoDataUrl().catch(() => undefined);
   const meta: PdfHeaderMeta = {
     title: 'Rapport de gestion',
     subtitle: `Période : ${formatDate(data.periodFrom)} au ${formatDate(data.periodTo)}`,
+    logo,
   };
 
   drawHeader(doc, meta);

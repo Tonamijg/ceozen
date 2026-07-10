@@ -43,18 +43,53 @@ export function fmtCompact(n: number): string {
 export interface PdfHeaderMeta {
   title: string;
   subtitle: string;
+  logo?: string; // PNG data URL, preloaded via loadKtechLogoDataUrl()
+}
+
+// jsPDF can't embed SVG directly — rasterize the K-Tech logo to a PNG data URL
+// once (in the browser) and reuse it on every header draw. Cached across calls
+// within the same page session.
+let cachedLogoDataUrl: string | null = null;
+
+export async function loadKtechLogoDataUrl(): Promise<string> {
+  if (cachedLogoDataUrl) return cachedLogoDataUrl;
+
+  const svgText = await fetch('/ktech-logo-blue.svg').then((r) => r.text());
+  const svgUrl = URL.createObjectURL(new Blob([svgText], { type: 'image/svg+xml' }));
+
+  const img = new Image();
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error('Impossible de charger le logo K-Tech'));
+    img.src = svgUrl;
+  });
+
+  const scale = 4; // supersample for a crisp print
+  const canvas = document.createElement('canvas');
+  canvas.width = (img.naturalWidth || 320) * scale;
+  canvas.height = (img.naturalHeight || 160) * scale;
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  URL.revokeObjectURL(svgUrl);
+
+  cachedLogoDataUrl = canvas.toDataURL('image/png');
+  return cachedLogoDataUrl;
 }
 
 export function drawHeader(doc: jsPDF, meta: PdfHeaderMeta) {
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(18);
-  doc.setTextColor(...BLUE);
-  doc.text('CEOZEN', MARGIN, 15);
+  if (meta.logo) {
+    doc.addImage(meta.logo, 'PNG', MARGIN, 5, 30, 15);
+  } else {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.setTextColor(...BLUE);
+    doc.text('CEOZEN', MARGIN, 15);
 
-  doc.setFont('helvetica', 'italic');
-  doc.setFontSize(7.5);
-  doc.setTextColor(...MUTED);
-  doc.text('by Tech big', MARGIN, 20);
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...MUTED);
+    doc.text('by Tech big', MARGIN, 20);
+  }
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);

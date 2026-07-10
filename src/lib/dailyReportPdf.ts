@@ -8,7 +8,8 @@ import { PAYMENT_LABELS, type PaymentMethod } from '@/types';
 import {
   MARGIN, PAGE_W, NAVY, MUTED, BLUE, VIOLET, GREEN, RED, ORANGE, LIGHT,
   fmtNum, fmtCompact, drawHeader, drawFooter, drawPageNumbers,
-  ensureSpace, sectionTitle, drawKpiBox, emptyStateText, type PdfHeaderMeta,
+  ensureSpace, sectionTitle, drawKpiBox, emptyStateText, loadKtechLogoDataUrl,
+  type PdfHeaderMeta,
 } from '@/lib/pdfKit';
 
 function fmtTime(iso: string): string {
@@ -87,6 +88,7 @@ export interface DailyReportData {
 
 export async function generateDailyReportPDF(data: DailyReportData): Promise<void> {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const logo = await loadKtechLogoDataUrl().catch(() => undefined);
 
   const dateLabel = new Intl.DateTimeFormat('fr-FR', {
     weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
@@ -95,6 +97,7 @@ export async function generateDailyReportPDF(data: DailyReportData): Promise<voi
   const meta: PdfHeaderMeta = {
     title: 'Rapport journalier',
     subtitle: dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1),
+    logo,
   };
 
   drawHeader(doc, meta);
