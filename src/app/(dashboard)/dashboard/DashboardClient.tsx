@@ -14,7 +14,7 @@ import {
 import Link from 'next/link';
 import { formatDateTime } from '@/lib/utils';
 import { cn } from '@/lib/utils';
-import type { DailyReportData, DailySaleRow, DailyCreditRow } from '@/lib/dailyReportPdf';
+import type { DailyReportData, DailySaleRow, DailySaleLineRow, DailyCreditRow } from '@/lib/dailyReportPdf';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ChartData { date: string; revenue: number; expenses: number; }
@@ -233,6 +233,7 @@ export default function DashboardClient({
 
       const [
         { data: todaySales },
+        { data: todaySaleItems },
         { data: todayAvoirs },
         { data: todayTrocs },
         { data: todayExpenses },
@@ -243,7 +244,9 @@ export default function DashboardClient({
         { data: allAvoirsAll },
       ] = await Promise.all([
         supabase.from('v_sales').select('*').gte('created_at', fromIso).lte('created_at', toIso).order('created_at'),
-        supabase.from('sale_avoirs').select('id, avoir_number, total, created_at, sale:sales(sale_number, client_name)')
+        supabase.from('sale_items').select('sale_id, qty, unit_price, total, product:products(name), sale:sales!inner(created_at)')
+          .gte('sale.created_at', fromIso).lte('sale.created_at', toIso),
+        supabase.from('sale_avoirs').select('id, avoir_number, total, reason, created_at, sale:sales(sale_number, client_name)')
           .gte('created_at', fromIso).lte('created_at', toIso),
         supabase.from('trocs').select('*').gte('created_at', fromIso).lte('created_at', toIso).order('created_at'),
         supabase.from('expenses').select('*, category:expense_categories(name)').eq('expense_date', dateStr).order('created_at'),
@@ -275,7 +278,46 @@ export default function DashboardClient({
           is_avoir:       true,
         };
       });
-      const allSalesRows = [...salesRows, ...avoirRows].sort((a, b) => a.created_at.localeCompare(b.created_at));
+
+      // ── Détail des articles vendus (qté, PU, montant) ──────────────────────
+      const salesById: Record<string, { sale_number: string; client_name: string | null; payment_method: string; created_at: string }> = {};
+      (todaySales ?? []).forEach((s: Record<string, unknown>) => {
+        salesById[s.id as string] = {
+          sale_number: s.sale_number as string,
+          client_name: s.client_name as string | null,
+          payment_method: s.payment_method as string,
+          created_at: s.created_at as string,
+        };
+      });
+      const saleItemLines: DailySaleLineRow[] = (todaySaleItems ?? []).map((item: Record<string, unknown>) => {
+        const product = Array.isArray(item.product) ? item.product[0] : item.product as Record<string, unknown> | null;
+        const header = salesById[item.sale_id as string];
+        return {
+          created_at:     header?.created_at ?? '',
+          sale_number:    header?.sale_number ?? '—',
+          client_name:    header?.client_name ?? null,
+          product_name:   (product?.name as string) ?? '—',
+          qty:            item.qty as number,
+          unit_price:     item.unit_price as number,
+          total:          item.total as number,
+          payment_method: header?.payment_method ?? '—',
+        };
+      });
+      const avoirLines: DailySaleLineRow[] = (todayAvoirs ?? []).map((a: Record<string, unknown>) => {
+        const sale = Array.isArray(a.sale) ? a.sale[0] : a.sale as Record<string, unknown> | null;
+        return {
+          created_at:     a.created_at as string,
+          sale_number:    a.avoir_number as string,
+          client_name:    (sale?.client_name ?? null) as string | null,
+          product_name:   (a.reason as string) || 'Avoir',
+          qty:            null,
+          unit_price:     null,
+          total:          a.total as number,
+          payment_method: '—',
+          is_avoir:       true,
+        };
+      });
+      const saleLines = [...saleItemLines, ...avoirLines].sort((a, b) => a.created_at.localeCompare(b.created_at));
 
       const revenue      = salesRows.reduce((s, x) => s + x.total, 0) - avoirRows.reduce((s, x) => s + x.total, 0);
       const salesCount   = salesRows.length;
@@ -377,7 +419,7 @@ export default function DashboardClient({
         avgSale,
         trocsCount: (todayTrocs ?? []).length,
         trocsRevenue,
-        sales: allSalesRows,
+        saleLines,
         trocs: trocRows,
         dailyExpenses,
         treasury: treasuryRows,

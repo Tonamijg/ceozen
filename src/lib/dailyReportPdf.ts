@@ -30,6 +30,19 @@ export interface DailySaleRow {
   is_avoir?: boolean;
 }
 
+// Une ligne par article vendu (ou une ligne unique pour un avoir)
+export interface DailySaleLineRow {
+  created_at: string;
+  sale_number: string;
+  client_name?: string | null;
+  product_name: string;
+  qty: number | null;
+  unit_price: number | null;
+  total: number;
+  payment_method: string;
+  is_avoir?: boolean;
+}
+
 export interface DailyTrocRow {
   created_at: string;
   troc_number: string;
@@ -78,7 +91,7 @@ export interface DailyReportData {
   avgSale: number;
   trocsCount: number;
   trocsRevenue: number;
-  sales: DailySaleRow[];
+  saleLines: DailySaleLineRow[];
   trocs: DailyTrocRow[];
   dailyExpenses: DailyExpenseRow[];
   treasury: DailyTreasuryRow[];
@@ -135,29 +148,36 @@ export async function generateDailyReportPDF(data: DailyReportData): Promise<voi
   y = ensureSpace(doc, y, 20, meta);
   y = sectionTitle(doc, 'Ventes du jour', y, BLUE);
 
-  if (data.sales.length) {
+  if (data.saleLines.length) {
     autoTable(doc, {
       startY: y,
       margin: { top: 30, left: MARGIN, right: MARGIN },
-      head: [['Heure', 'N°', 'Client', 'Vendeur', 'Paiement', 'Montant (FCFA)']],
-      body: data.sales.map((s) => [
+      head: [['Heure', 'N°', 'Client', 'Article', 'Qté', 'P.U. (FCFA)', 'Montant (FCFA)', 'Paiement']],
+      body: data.saleLines.map((s) => [
         fmtTime(s.created_at),
         s.sale_number + (s.is_avoir ? ' (avoir)' : ''),
         s.client_name || 'Anonyme',
-        s.seller_name,
-        payLabel(s.payment_method),
+        s.product_name,
+        s.qty === null ? '—' : String(s.qty),
+        s.unit_price === null ? '—' : fmtNum(s.unit_price),
         (s.is_avoir ? '-' : '') + fmtNum(Math.abs(s.total)),
+        payLabel(s.payment_method),
       ]),
       theme: 'plain',
-      styles: { fontSize: 8, textColor: NAVY, cellPadding: 2 },
+      styles: { fontSize: 7.5, textColor: NAVY, cellPadding: 1.8 },
       headStyles: { fillColor: BLUE, textColor: 255, fontStyle: 'bold' },
       alternateRowStyles: { fillColor: LIGHT },
       columnStyles: {
-        0: { cellWidth: 16 },
-        5: { cellWidth: 32, halign: 'right' },
+        0: { cellWidth: 14 },
+        1: { cellWidth: 28 },
+        2: { cellWidth: 22 },
+        4: { cellWidth: 10, halign: 'center' },
+        5: { cellWidth: 22, halign: 'right' },
+        6: { cellWidth: 24, halign: 'right' },
+        7: { cellWidth: 14 },
       },
       didParseCell: (hookData) => {
-        if (hookData.section === 'body' && data.sales[hookData.row.index]?.is_avoir) {
+        if (hookData.section === 'body' && data.saleLines[hookData.row.index]?.is_avoir) {
           hookData.cell.styles.textColor = RED;
         }
       },

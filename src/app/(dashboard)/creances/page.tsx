@@ -48,6 +48,7 @@ export default function CreancesPage() {
 
   const [tab, setTab]                     = useState<Tab>('creances');
   const [creances, setCreances]           = useState<VCreance[]>([]);
+  const [creanceItems, setCreanceItems]   = useState<Record<string, string>>({});
   const [dettes, setDettes]               = useState<VDette[]>([]);
   const [initiales, setInitiales]         = useState<VCreanceInitiale[]>([]);
   const [dettesInit, setDettesInit]       = useState<VDetteInitiale[]>([]);
@@ -108,6 +109,32 @@ export default function CreancesPage() {
     setInitiales((ini ?? []) as VCreanceInitiale[]);
     setDettesInit((dinit ?? []) as VDetteInitiale[]);
     if (roleData?.data) setUserRole((roleData.data as { role: string }).role);
+
+    // ── Article / opération liée (téléphone vendu ou échangé) ──────────────
+    const venteIds = ((c ?? []) as VCreance[]).filter((x) => x.type === 'vente').map((x) => x.id);
+    const trocIds  = ((c ?? []) as VCreance[]).filter((x) => x.type === 'troc').map((x) => x.id);
+    const [{ data: items }, { data: trocsData }] = await Promise.all([
+      venteIds.length
+        ? supabase.from('sale_items').select('sale_id, qty, product:products(name)').in('sale_id', venteIds)
+        : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+      trocIds.length
+        ? supabase.from('trocs').select('id, product_given_name').in('id', trocIds)
+        : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+    ]);
+    const itemsMap: Record<string, string> = {};
+    (items ?? []).forEach((it: Record<string, unknown>) => {
+      const product = Array.isArray(it.product) ? it.product[0] : it.product as Record<string, unknown> | null;
+      const name = (product?.name as string) ?? '—';
+      const qty  = it.qty as number;
+      const label = qty > 1 ? `${name} (×${qty})` : name;
+      const saleId = it.sale_id as string;
+      itemsMap[saleId] = itemsMap[saleId] ? `${itemsMap[saleId]}, ${label}` : label;
+    });
+    (trocsData ?? []).forEach((t: Record<string, unknown>) => {
+      itemsMap[t.id as string] = t.product_given_name as string;
+    });
+    setCreanceItems(itemsMap);
+
     setLoading(false);
   }, [supabase]);
 
@@ -561,6 +588,7 @@ export default function CreancesPage() {
                   <tr className="border-b border-dark-600">
                     <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Référence</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Type</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Article / Opération</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Client</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Par</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide whitespace-nowrap">Depuis</th>
@@ -582,6 +610,9 @@ export default function CreancesPage() {
                         {c.type === 'troc'
                           ? <span className="badge-violet text-xs">Troc</span>
                           : <span className="badge-blue text-xs">Vente</span>}
+                      </td>
+                      <td className="px-4 py-3 text-slate-300 text-xs max-w-[220px]">
+                        {creanceItems[c.id] ?? <span className="text-slate-600 italic">—</span>}
                       </td>
                       <td className="px-4 py-3 text-slate-300">{c.client_name ?? <span className="text-slate-600 italic">—</span>}</td>
                       <td className="px-4 py-3 text-slate-400 text-xs">{c.creator_name}</td>
@@ -638,6 +669,7 @@ export default function CreancesPage() {
                         <td className="px-4 py-3">
                           <span className="text-xs px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-400 border border-violet-500/20">Manuel</span>
                         </td>
+                        <td className="px-4 py-3 text-slate-600 italic text-xs">—</td>
                         <td className="px-4 py-3 text-slate-300">{ini.client_name}</td>
                         <td className="px-4 py-3 text-slate-400 text-xs italic">{ini.description ?? '—'}</td>
                         <td className="px-4 py-3 text-slate-400 whitespace-nowrap text-xs">
