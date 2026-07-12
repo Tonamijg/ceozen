@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import type { Troc, Product } from '@/types';
 import {
   ArrowLeftRight, Plus, RefreshCw, X, Check,
-  CheckCircle2, Smartphone, Clock, Package, Printer
+  CheckCircle2, Smartphone, Clock, Package, Printer, Edit2
 } from 'lucide-react';
 import { formatDate, cn, localDateStr } from '@/lib/utils';
 import { printTrocReceipt } from '@/lib/print';
@@ -39,6 +39,9 @@ export default function TrocsPage() {
   const [trocError,  setTrocError]  = useState('');
   const [trocSuccess,setTrocSuccess]= useState('');
   const [activeTab,  setActiveTab]  = useState<'historique' | 'reprises'>('historique');
+  const [userRole,     setUserRole]     = useState('');
+  const [editingTroc,  setEditingTroc]  = useState<Troc | null>(null);
+  const canEdit = userRole === 'admin' || userRole === 'super_admin';
 
   // ── Formulaire ────────────────────────────────────────────────────────────
   const [clientName,     setClientName]     = useState('');
@@ -59,14 +62,18 @@ export default function TrocsPage() {
   // ── Chargement ────────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [{ data: t }, { data: p }, { data: r }] = await Promise.all([
+    const [{ data: t }, { data: p }, { data: r }, roleData] = await Promise.all([
       supabase.from('trocs').select('*').order('created_at', { ascending: false }),
       supabase.from('products').select('*').eq('is_active', true).gt('stock_qty', 0).order('name'),
       supabase.from('products').select('*').ilike('description', 'Reprise troc%').order('created_at', { ascending: false }),
+      supabase.auth.getUser().then(({ data: { user } }) =>
+        user ? supabase.from('profiles').select('role').eq('id', user.id).single() : null
+      ),
     ]);
     setTrocs((t ?? []) as Troc[]);
     setProducts((p ?? []) as Product[]);
     setReprises((r ?? []) as Product[]);
+    if (roleData?.data) setUserRole((roleData.data as { role: string }).role);
     setLoading(false);
   }, [supabase]);
 
@@ -78,10 +85,63 @@ export default function TrocsPage() {
     setReceivedName(''); setReceivedRef(''); setReceivedValue('');
     setPaymentMethod('especes'); setAcompte(''); setCreditDueDate('');
     setTrocDate(localDateStr()); setNotes('');
+    setEditingTroc(null);
   }
 
-  // ── Soumission ────────────────────────────────────────────────────────────
+  function openEdit(t: Troc) {
+    setEditingTroc(t);
+    setClientName(t.client_name ?? '');
+    setClientPhone(t.client_phone ?? '');
+    setSelectedProd(null);
+    setGivenPrice(String(t.product_given_price));
+    setReceivedName(t.product_received_name);
+    setReceivedRef(t.product_received_ref ?? '');
+    setReceivedValue(String(t.product_received_value));
+    setPaymentMethod(t.payment_method === 'credit' ? 'credit' : t.payment_method === 'mobile_money' ? 'mobile_money' : 'especes');
+    setAcompte(t.acompte ? String(t.acompte) : '');
+    setCreditDueDate(t.credit_due_date ?? '');
+    setTrocDate(t.troc_date ?? localDateStr());
+    setNotes(t.notes ?? '');
+    setShowModal(true);
+  }
+
+  // ── Soumission (création ou correction) ────────────────────────────────────
   async function handleSubmit() {
+    if (editingTroc) {
+      if (!receivedName || !givenPrice || !receivedValue) return;
+      setSaving(true);
+      try {
+        const res = await fetch('/api/troc/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            trocId: editingTroc.id,
+            clientName, clientPhone,
+            productGivenPrice: givenPrice,
+            productReceivedId: editingTroc.product_received_id,
+            productReceivedName: receivedName,
+            productReceivedRef: receivedRef,
+            productReceivedValue: receivedValue,
+            paymentMethod, acompte: acompte || '0', creditDueDate, trocDate, notes,
+          }),
+        });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error ?? 'Erreur serveur');
+
+        setShowModal(false);
+        resetForm();
+        setTrocSuccess('Troc corrigé avec succès !');
+        setTimeout(() => setTrocSuccess(''), 4000);
+        loadData();
+      } catch (e) {
+        setTrocError(`Erreur : ${e instanceof Error ? e.message : 'Impossible de corriger le troc'}`);
+        setTimeout(() => setTrocError(''), 7000);
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
     if (!selectedProd || !receivedName || !givenPrice || !receivedValue) return;
     setSaving(true);
     try {
@@ -144,7 +204,7 @@ export default function TrocsPage() {
   const enCredit        = trocs.filter(t => t.payment_method === 'credit' && !t.is_settled).length;
   const reprisesEnStock = trocs.length; // chaque troc = 1 reprise en stock
 
-  const canSubmit = !!selectedProd && !!receivedName && !!givenPrice && !!receivedValue;
+  const canSubmit = (!!selectedProd || !!editingTroc) && !!receivedName && !!givenPrice && !!receivedValue;
 
   return (
     <div className="space-y-6">
@@ -299,7 +359,7 @@ export default function TrocsPage() {
                         <p className="text-xs text-slate-500 mt-0.5 ml-5">{fmt(t.product_received_value)}</p>
                       </td>
                       <td className="px-4 py-3 text-right font-bold text-neon-violet">{fmt(t.complement)}</td>
-                      <td className="px-4 py-3 text-slate-400 whitespace-nowrap text-xs">{formatDate((t as unknown as Record<string,string>).troc_date ?? t.created_at)}</td>
+                      <td className="px-4 py-3 text-slate-400 whitespace-nowrap text-xs">{formatDate(t.troc_date ?? t.created_at)}</td>
                       <td className="px-4 py-3 text-center">
                         {t.payment_method === 'credit' && !t.is_settled ? (
                           <span className="badge-red text-xs flex items-center gap-1 justify-center">
@@ -314,25 +374,36 @@ export default function TrocsPage() {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <button
-                          onClick={() => printTrocReceipt({
-                            troc_number:            t.troc_number,
-                            created_at:             t.created_at,
-                            client_name:            t.client_name,
-                            client_phone:           t.client_phone,
-                            product_given_name:     t.product_given_name,
-                            product_given_price:    t.product_given_price,
-                            product_received_name:  t.product_received_name,
-                            product_received_value: t.product_received_value,
-                            complement:             t.complement,
-                            payment_method:         PAYMENT_LABELS[t.payment_method] ?? t.payment_method,
-                            notes:                  t.notes,
-                          })}
-                          title="Imprimer le reçu"
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-dark-600 transition-all"
-                        >
-                          <Printer className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          {canEdit && (
+                            <button
+                              onClick={() => openEdit(t)}
+                              title="Modifier le troc"
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-yellow-400 hover:bg-yellow-400/10 transition-all"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => printTrocReceipt({
+                              troc_number:            t.troc_number,
+                              created_at:             t.created_at,
+                              client_name:            t.client_name,
+                              client_phone:           t.client_phone,
+                              product_given_name:     t.product_given_name,
+                              product_given_price:    t.product_given_price,
+                              product_received_name:  t.product_received_name,
+                              product_received_value: t.product_received_value,
+                              complement:             t.complement,
+                              payment_method:         PAYMENT_LABELS[t.payment_method] ?? t.payment_method,
+                              notes:                  t.notes,
+                            })}
+                            title="Imprimer le reçu"
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-dark-600 transition-all"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -431,8 +502,8 @@ export default function TrocsPage() {
                   <ArrowLeftRight className="w-4 h-4 text-neon-violet" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-semibold text-slate-100">Nouveau troc</h2>
-                  <p className="text-xs text-slate-500">Échange téléphone + complément</p>
+                  <h2 className="text-sm font-semibold text-slate-100">{editingTroc ? `Corriger le troc ${editingTroc.troc_number}` : 'Nouveau troc'}</h2>
+                  <p className="text-xs text-slate-500">{editingTroc ? 'Erreur de saisie ? Corrige les infos ci-dessous' : 'Échange téléphone + complément'}</p>
                 </div>
               </div>
               <button
@@ -474,20 +545,28 @@ export default function TrocsPage() {
                     </p>
                     <div>
                       <label className="text-xs text-slate-500 mb-1 block">Produit du stock *</label>
-                      <select
-                        value={selectedProd?.id ?? ''}
-                        onChange={e => {
-                          const p = products.find(x => x.id === e.target.value) ?? null;
-                          setSelectedProd(p);
-                          if (p) setGivenPrice(String(p.sell_price));
-                        }}
-                        className="input w-full"
-                      >
-                        <option value="">Sélectionner…</option>
-                        {products.map(p => (
-                          <option key={p.id} value={p.id}>{p.name} (×{p.stock_qty})</option>
-                        ))}
-                      </select>
+                      {editingTroc ? (
+                        <div className="input w-full flex items-center gap-1.5 text-slate-300 bg-dark-700/50 cursor-not-allowed">
+                          <Smartphone className="w-3.5 h-3.5 text-red-400/60 flex-shrink-0" />
+                          {editingTroc.product_given_name}
+                        </div>
+                      ) : (
+                        <select
+                          value={selectedProd?.id ?? ''}
+                          onChange={e => {
+                            const p = products.find(x => x.id === e.target.value) ?? null;
+                            setSelectedProd(p);
+                            if (p) setGivenPrice(String(p.sell_price));
+                          }}
+                          className="input w-full"
+                        >
+                          <option value="">Sélectionner…</option>
+                          {products.map(p => (
+                            <option key={p.id} value={p.id}>{p.name} (×{p.stock_qty})</option>
+                          ))}
+                        </select>
+                      )}
+                      {editingTroc && <p className="text-[10px] text-slate-600 mt-1">Le produit donné n&apos;est pas modifiable — seul le prix peut être corrigé</p>}
                     </div>
                     <div>
                       <label className="text-xs text-slate-500 mb-1 block">Prix de vente (FCFA) *</label>
@@ -656,6 +735,8 @@ export default function TrocsPage() {
                 >
                   {saving ? (
                     <><RefreshCw className="w-4 h-4 animate-spin" /> Enregistrement…</>
+                  ) : editingTroc ? (
+                    <><Check className="w-4 h-4" /> Enregistrer la correction</>
                   ) : (
                     <><Check className="w-4 h-4" /> Valider le troc</>
                   )}

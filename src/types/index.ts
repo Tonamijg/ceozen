@@ -221,9 +221,11 @@ export interface Troc {
   product_received_ref?: string;
   product_received_value: number;
   complement: number;
+  acompte?: number;
   payment_method: PaymentMethod;
   is_settled: boolean;
   credit_due_date?: string;
+  troc_date?: string;
   notes?: string;
   created_by?: string;
   created_at: string;
