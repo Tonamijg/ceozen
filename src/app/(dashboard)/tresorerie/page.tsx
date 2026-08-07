@@ -164,6 +164,21 @@ export default function TresoreriePage() {
       .from('sale_avoirs')
       .select('total, created_at, sale:sales(payment_method)');
 
+    // 6. Trocs (tous) — complement > 0 = encaissement, < 0 = décaissement
+    const { data: allTrocs } = await supabase
+      .from('trocs')
+      .select('complement, payment_method, created_at');
+
+    // 7. Règlements de créances/dettes soldées (compte + montant renseignés à la saisie)
+    const [{ data: settledSales }, { data: settledTrocs }, { data: settledInitiales }] = await Promise.all([
+      supabase.from('sales').select('settled_amount, settled_account_id, settled_at').not('settled_account_id', 'is', null),
+      supabase.from('trocs').select('settled_amount, settled_account_id, settled_at').not('settled_account_id', 'is', null),
+      supabase.from('creances_initiales').select('settled_amount, settled_account_id, settled_at').not('settled_account_id', 'is', null),
+    ]);
+    const settledData = [
+      ...(settledSales ?? []), ...(settledTrocs ?? []), ...(settledInitiales ?? []),
+    ] as { settled_amount: number | null; settled_account_id: string | null; settled_at: string | null }[];
+
     const accsData = (accs ?? []) as TreasuryAccount[];
     const apportsData = (allApports ?? []) as Apport[];
     const retraitsData = (allRetraits ?? []) as Retrait[];
@@ -216,6 +231,29 @@ export default function TresoreriePage() {
         const inPeriod = (!from || dt >= from) && dt <= to;
         if (inPeriod) duringSorties += av.total ?? 0;
         else if (!from || dt < from) beforeSorties += av.total ?? 0;
+      }
+
+      // Trocs (complément) — positif = encaissement, négatif = le magasin rend de l'argent
+      for (const t of allTrocs ?? []) {
+        if (!keys.includes(t.payment_method)) continue;
+        const dt = t.created_at;
+        const inPeriod = (!from || dt >= from) && dt <= to;
+        const c = t.complement ?? 0;
+        if (c >= 0) {
+          if (inPeriod) duringEntrees += c; else if (!from || dt < from) beforeEntrees += c;
+        } else {
+          const abs = Math.abs(c);
+          if (inPeriod) duringSorties += abs; else if (!from || dt < from) beforeSorties += abs;
+        }
+      }
+
+      // Règlements de créances soldées (compte renseigné à la saisie)
+      for (const r of settledData) {
+        if (r.settled_account_id !== acc.id || !r.settled_at) continue;
+        const dt = r.settled_at;
+        const inPeriod = (!from || dt >= from) && dt <= to;
+        const amt = r.settled_amount ?? 0;
+        if (inPeriod) duringEntrees += amt; else if (!from || dt < from) beforeEntrees += amt;
       }
 
       // Apports DG
