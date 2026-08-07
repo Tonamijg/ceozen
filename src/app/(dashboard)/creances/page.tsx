@@ -42,6 +42,8 @@ interface VDetteInitiale {
   created_at: string;
 }
 
+interface TreasuryAccountLite { id: string; name: string; type: string; }
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function CreancesPage() {
   const supabase = createClient();
@@ -52,6 +54,7 @@ export default function CreancesPage() {
   const [dettes, setDettes]               = useState<VDette[]>([]);
   const [initiales, setInitiales]         = useState<VCreanceInitiale[]>([]);
   const [dettesInit, setDettesInit]       = useState<VDetteInitiale[]>([]);
+  const [accounts, setAccounts]           = useState<TreasuryAccountLite[]>([]);
   const [loading, setLoading]             = useState(true);
   const [saving, setSaving]               = useState<string | null>(null);
   const [filterSettled, setFilterSettled] = useState(false);
@@ -72,9 +75,10 @@ export default function CreancesPage() {
   type ConfirmAction = {
     label: string;       // nom du client ou fournisseur
     amount: number;
-    onConfirm: () => void;
+    onConfirm: (accountId: string) => void;
   };
   const [confirmSettle, setConfirmSettle] = useState<ConfirmAction | null>(null);
+  const [settleAccountId, setSettleAccountId] = useState('');
 
   // ── Formulaire créance initiale ─────────────────────────────────────────────
   const [showInitForm,  setShowInitForm]  = useState(false);
@@ -95,11 +99,12 @@ export default function CreancesPage() {
   // ── Chargement ──────────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [{ data: c }, { data: d }, { data: ini }, { data: dinit }, roleData] = await Promise.all([
+    const [{ data: c }, { data: d }, { data: ini }, { data: dinit }, { data: accs }, roleData] = await Promise.all([
       supabase.from('v_creances').select('*').order('created_at', { ascending: false }),
       supabase.from('v_dettes').select('*').order('expense_date', { ascending: false }),
       supabase.from('creances_initiales').select('*').order('since_date', { ascending: false }),
       supabase.from('dettes_initiales').select('*').order('since_date', { ascending: false }),
+      supabase.from('treasury_accounts').select('id,name,type').order('type'),
       supabase.auth.getUser().then(({ data: { user } }) =>
         user ? supabase.from('profiles').select('role').eq('id', user.id).single() : null
       ),
@@ -108,6 +113,7 @@ export default function CreancesPage() {
     setDettes((d ?? []) as VDette[]);
     setInitiales((ini ?? []) as VCreanceInitiale[]);
     setDettesInit((dinit ?? []) as VDetteInitiale[]);
+    setAccounts((accs ?? []) as TreasuryAccountLite[]);
     if (roleData?.data) setUserRole((roleData.data as { role: string }).role);
 
     // ── Article / opération liée (téléphone vendu ou échangé) ──────────────
@@ -141,42 +147,57 @@ export default function CreancesPage() {
   useEffect(() => { loadData(); }, [loadData]);
 
   // ── Marquer une créance soldée (vente ou troc) ─────────────────────────────
-  async function settleCreance(id: string, type: 'vente' | 'troc') {
+  async function settleCreance(id: string, type: 'vente' | 'troc', accountId: string, amount: number) {
     setSaving(id);
+    const patch = {
+      is_settled: true,
+      settled_at: new Date().toISOString(),
+      settled_amount: amount,
+      settled_account_id: accountId || null,
+    };
     if (type === 'troc') {
-      await supabase.from('trocs').update({ is_settled: true }).eq('id', id);
+      await supabase.from('trocs').update(patch).eq('id', id);
     } else {
-      await supabase.from('sales').update({ is_settled: true }).eq('id', id);
+      await supabase.from('sales').update(patch).eq('id', id);
     }
     setSaving(null);
     loadData();
   }
 
   // ── Marquer une dette soldée ────────────────────────────────────────────────
-  async function settleDette(id: string) {
+  async function settleDette(id: string, accountId: string, amount: number) {
     setSaving(id);
-    await supabase.from('expenses').update({ is_settled: true }).eq('id', id);
+    await supabase.from('expenses').update({
+      is_settled: true,
+      settled_at: new Date().toISOString(),
+      settled_amount: amount,
+      settled_account_id: accountId || null,
+    }).eq('id', id);
     setSaving(null);
     loadData();
   }
 
   // ── Marquer créance initiale soldée ────────────────────────────────────────
-  async function settleInitiale(id: string) {
+  async function settleInitiale(id: string, accountId: string, amount: number) {
     setSaving(id);
     await supabase.from('creances_initiales').update({
       is_settled: true,
       settled_at: new Date().toISOString(),
+      settled_amount: amount,
+      settled_account_id: accountId || null,
     }).eq('id', id);
     setSaving(null);
     loadData();
   }
 
   // ── Marquer dette initiale soldée ──────────────────────────────────────────
-  async function settleDetteInitiale(id: string) {
+  async function settleDetteInitiale(id: string, accountId: string, amount: number) {
     setSaving(id);
     await supabase.from('dettes_initiales').update({
       is_settled: true,
       settled_at: new Date().toISOString(),
+      settled_amount: amount,
+      settled_account_id: accountId || null,
     }).eq('id', id);
     setSaving(null);
     loadData();
@@ -639,11 +660,14 @@ export default function CreancesPage() {
                       <td className="px-4 py-3 text-right">
                         {!c.is_settled && (
                           <button
-                            onClick={() => setConfirmSettle({
-                              label: c.client_name ?? 'Client inconnu',
-                              amount: c.amount,
-                              onConfirm: () => settleCreance(c.id, c.type),
-                            })}
+                            onClick={() => {
+                              setSettleAccountId(accounts[0]?.id ?? '');
+                              setConfirmSettle({
+                                label: c.client_name ?? 'Client inconnu',
+                                amount: c.amount,
+                                onConfirm: (accountId) => settleCreance(c.id, c.type, accountId, c.amount),
+                              });
+                            }}
                             disabled={saving === c.id}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors disabled:opacity-50">
                             <CheckCircle2 className="w-3.5 h-3.5" />
@@ -689,11 +713,14 @@ export default function CreancesPage() {
                         <td className="px-4 py-3 text-right">
                           {!ini.is_settled && (
                             <button
-                              onClick={() => setConfirmSettle({
-                                label: ini.client_name,
-                                amount: ini.amount,
-                                onConfirm: () => settleInitiale(ini.id),
-                              })}
+                              onClick={() => {
+                                setSettleAccountId(accounts[0]?.id ?? '');
+                                setConfirmSettle({
+                                  label: ini.client_name,
+                                  amount: ini.amount,
+                                  onConfirm: (accountId) => settleInitiale(ini.id, accountId, ini.amount),
+                                });
+                              }}
                               disabled={saving === ini.id}
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors disabled:opacity-50">
                               <CheckCircle2 className="w-3.5 h-3.5" />
@@ -789,11 +816,14 @@ export default function CreancesPage() {
                       <td className="px-4 py-3 text-right">
                         {!d.is_settled && (
                           <button
-                            onClick={() => setConfirmSettle({
-                              label: d.supplier_name ?? d.description,
-                              amount: d.amount,
-                              onConfirm: () => settleDette(d.id),
-                            })}
+                            onClick={() => {
+                              setSettleAccountId(accounts[0]?.id ?? '');
+                              setConfirmSettle({
+                                label: d.supplier_name ?? d.description,
+                                amount: d.amount,
+                                onConfirm: (accountId) => settleDette(d.id, accountId, d.amount),
+                              });
+                            }}
                             disabled={saving === d.id}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors disabled:opacity-50">
                             <CheckCircle2 className="w-3.5 h-3.5" />
@@ -837,11 +867,14 @@ export default function CreancesPage() {
                         <td className="px-4 py-3 text-right">
                           {!di.is_settled && (
                             <button
-                              onClick={() => setConfirmSettle({
-                                label: di.supplier_name,
-                                amount: di.amount,
-                                onConfirm: () => settleDetteInitiale(di.id),
-                              })}
+                              onClick={() => {
+                                setSettleAccountId(accounts[0]?.id ?? '');
+                                setConfirmSettle({
+                                  label: di.supplier_name,
+                                  amount: di.amount,
+                                  onConfirm: (accountId) => settleDetteInitiale(di.id, accountId, di.amount),
+                                });
+                              }}
                               disabled={saving === di.id}
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors disabled:opacity-50">
                               <CheckCircle2 className="w-3.5 h-3.5" />
@@ -920,13 +953,21 @@ export default function CreancesPage() {
                 <span className="font-bold text-emerald-400">{fmt(confirmSettle.amount)}</span>
               </div>
             </div>
+            {accounts.length > 0 && (
+              <div>
+                <label className="label">Encaissé / payé sur quel compte ?</label>
+                <select value={settleAccountId} onChange={e => setSettleAccountId(e.target.value)} className="input">
+                  {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </div>
+            )}
             <div className="flex justify-end gap-3 pt-1">
               <button onClick={() => setConfirmSettle(null)} className="btn-secondary">
                 Annuler
               </button>
               <button
                 onClick={() => {
-                  confirmSettle.onConfirm();
+                  confirmSettle.onConfirm(settleAccountId);
                   setConfirmSettle(null);
                 }}
                 className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 transition-all"
