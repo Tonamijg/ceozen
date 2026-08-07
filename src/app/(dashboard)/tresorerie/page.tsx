@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import {
-  Wallet, TrendingUp, TrendingDown, Plus, Settings,
+  Wallet, TrendingUp, TrendingDown, Plus, Minus, Settings,
   Calendar, ChevronDown, ChevronUp, Loader2, PiggyBank,
   Banknote, Smartphone, Building2, X, Check
 } from 'lucide-react';
@@ -19,6 +19,16 @@ interface TreasuryAccount {
 }
 
 interface Apport {
+  id: string;
+  account_id: string;
+  amount: number;
+  date: string;
+  note: string | null;
+  created_at: string;
+  account?: { name: string };
+}
+
+interface Retrait {
   id: string;
   account_id: string;
   amount: number;
@@ -88,10 +98,11 @@ export default function TresoreriePage() {
   const [period,   setPeriod]   = useState<Period>('month');
   const [accounts, setAccounts] = useState<TreasuryAccount[]>([]);
   const [apports,  setApports]  = useState<Apport[]>([]);
+  const [retraits, setRetraits] = useState<Retrait[]>([]);
   const [loading,  setLoading]  = useState(true);
 
   // Balances calculées
-  const [balances, setBalances] = useState<Record<string, { debut: number; fin: number; entrees: number; sorties: number; apports: number }>>({});
+  const [balances, setBalances] = useState<Record<string, { debut: number; fin: number; entrees: number; sorties: number; apports: number; retraits: number }>>({});
 
   // Modal apport
   const [showApport,   setShowApport]   = useState(false);
@@ -100,6 +111,14 @@ export default function TresoreriePage() {
   const [apportDate,   setApportDate]   = useState(() => localDateStr());
   const [apportNote,   setApportNote]   = useState('');
   const [savingApport, setSavingApport] = useState(false);
+
+  // Modal retrait
+  const [showRetrait,   setShowRetrait]   = useState(false);
+  const [retraitAccId,  setRetraitAccId]  = useState('');
+  const [retraitAmt,    setRetraitAmt]    = useState('');
+  const [retraitDate,   setRetraitDate]   = useState(() => localDateStr());
+  const [retraitNote,   setRetraitNote]   = useState('');
+  const [savingRetrait, setSavingRetrait] = useState(false);
 
   // Modal solde initial
   const [showInit,   setShowInit]   = useState(false);
@@ -123,6 +142,12 @@ export default function TresoreriePage() {
       .select('*, account:treasury_accounts(name)')
       .order('date', { ascending: false });
 
+    // 2bis. Retraits DG (tous)
+    const { data: allRetraits } = await supabase
+      .from('treasury_retraits')
+      .select('*, account:treasury_accounts(name)')
+      .order('date', { ascending: false });
+
     // 3. Ventes (toutes, hors crédit)
     const { data: allSales } = await supabase
       .from('sales')
@@ -139,14 +164,31 @@ export default function TresoreriePage() {
       .from('sale_avoirs')
       .select('total, created_at, sale:sales(payment_method)');
 
+    // 6. Trocs (tous) — complement > 0 = encaissement, < 0 = décaissement
+    const { data: allTrocs } = await supabase
+      .from('trocs')
+      .select('complement, payment_method, created_at');
+
+    // 7. Règlements de créances/dettes soldées (compte + montant renseignés à la saisie)
+    const [{ data: settledSales }, { data: settledTrocs }, { data: settledInitiales }] = await Promise.all([
+      supabase.from('sales').select('settled_amount, settled_account_id, settled_at').not('settled_account_id', 'is', null),
+      supabase.from('trocs').select('settled_amount, settled_account_id, settled_at').not('settled_account_id', 'is', null),
+      supabase.from('creances_initiales').select('settled_amount, settled_account_id, settled_at').not('settled_account_id', 'is', null),
+    ]);
+    const settledData = [
+      ...(settledSales ?? []), ...(settledTrocs ?? []), ...(settledInitiales ?? []),
+    ] as { settled_amount: number | null; settled_account_id: string | null; settled_at: string | null }[];
+
     const accsData = (accs ?? []) as TreasuryAccount[];
     const apportsData = (allApports ?? []) as Apport[];
+    const retraitsData = (allRetraits ?? []) as Retrait[];
 
     setAccounts(accsData);
     setApports(apportsData);
+    setRetraits(retraitsData);
 
     // ── Calcul des soldes ──────────────────────────────────────────────────
-    const computed: Record<string, { debut: number; fin: number; entrees: number; sorties: number; apports: number }> = {};
+    const computed: Record<string, { debut: number; fin: number; entrees: number; sorties: number; apports: number; retraits: number }> = {};
 
     for (const acc of accsData) {
       const keys = acc.payment_keys;
@@ -155,11 +197,13 @@ export default function TresoreriePage() {
       let beforeEntrees = 0;
       let beforeSorties = 0;
       let beforeApports = 0;
+      let beforeRetraits = 0;
 
       // Mouvement pendant la période
       let duringEntrees = 0;
       let duringSorties = 0;
       let duringApports = 0;
+      let duringRetraits = 0;
 
       // Ventes
       for (const s of allSales ?? []) {
@@ -189,6 +233,29 @@ export default function TresoreriePage() {
         else if (!from || dt < from) beforeSorties += av.total ?? 0;
       }
 
+      // Trocs (complément) — positif = encaissement, négatif = le magasin rend de l'argent
+      for (const t of allTrocs ?? []) {
+        if (!keys.includes(t.payment_method)) continue;
+        const dt = t.created_at;
+        const inPeriod = (!from || dt >= from) && dt <= to;
+        const c = t.complement ?? 0;
+        if (c >= 0) {
+          if (inPeriod) duringEntrees += c; else if (!from || dt < from) beforeEntrees += c;
+        } else {
+          const abs = Math.abs(c);
+          if (inPeriod) duringSorties += abs; else if (!from || dt < from) beforeSorties += abs;
+        }
+      }
+
+      // Règlements de créances soldées (compte renseigné à la saisie)
+      for (const r of settledData) {
+        if (r.settled_account_id !== acc.id || !r.settled_at) continue;
+        const dt = r.settled_at;
+        const inPeriod = (!from || dt >= from) && dt <= to;
+        const amt = r.settled_amount ?? 0;
+        if (inPeriod) duringEntrees += amt; else if (!from || dt < from) beforeEntrees += amt;
+      }
+
       // Apports DG
       for (const ap of apportsData) {
         if (ap.account_id !== acc.id) continue;
@@ -198,15 +265,25 @@ export default function TresoreriePage() {
         else if (!from || dt < from) beforeApports += ap.amount ?? 0;
       }
 
-      const soldeDebut = acc.initial_balance + beforeEntrees + beforeApports - beforeSorties;
-      const soldeFin   = soldeDebut + duringEntrees + duringApports - duringSorties;
+      // Retraits DG
+      for (const rt of retraitsData) {
+        if (rt.account_id !== acc.id) continue;
+        const dt = rt.date + 'T00:00:00.000Z';
+        const inPeriod = (!from || dt >= from) && dt <= to;
+        if (inPeriod) duringRetraits += rt.amount ?? 0;
+        else if (!from || dt < from) beforeRetraits += rt.amount ?? 0;
+      }
+
+      const soldeDebut = acc.initial_balance + beforeEntrees + beforeApports - beforeSorties - beforeRetraits;
+      const soldeFin   = soldeDebut + duringEntrees + duringApports - duringSorties - duringRetraits;
 
       computed[acc.id] = {
-        debut:   soldeDebut,
-        fin:     soldeFin,
-        entrees: duringEntrees + duringApports,
-        sorties: duringSorties,
-        apports: duringApports,
+        debut:    soldeDebut,
+        fin:      soldeFin,
+        entrees:  duringEntrees + duringApports,
+        sorties:  duringSorties + duringRetraits,
+        apports:  duringApports,
+        retraits: duringRetraits,
       };
     }
 
@@ -232,6 +309,25 @@ export default function TresoreriePage() {
     setSavingApport(false);
     setShowApport(false);
     setApportAmt(''); setApportNote('');
+    loadData();
+  }
+
+  // ── Retrait DG ────────────────────────────────────────────────────────────
+  async function handleRetrait(e: React.FormEvent) {
+    e.preventDefault();
+    if (!retraitAccId || !retraitAmt) return;
+    setSavingRetrait(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    await supabase.from('treasury_retraits').insert({
+      account_id: retraitAccId,
+      amount:     parseFloat(retraitAmt),
+      date:       retraitDate,
+      note:       retraitNote.trim() || null,
+      created_by: user!.id,
+    });
+    setSavingRetrait(false);
+    setShowRetrait(false);
+    setRetraitAmt(''); setRetraitNote('');
     loadData();
   }
 
@@ -278,6 +374,10 @@ export default function TresoreriePage() {
           <button onClick={openInit}
             className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 border border-dark-600 hover:border-dark-500 rounded-lg px-3 py-1.5 transition-colors">
             <Settings className="w-3.5 h-3.5" /> Soldes initiaux
+          </button>
+          <button onClick={() => { setRetraitAccId(accounts[0]?.id ?? ''); setShowRetrait(true); }}
+            className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-colors">
+            <Minus className="w-3.5 h-3.5" /> Retrait DG
           </button>
           <button onClick={() => { setApportAccId(accounts[0]?.id ?? ''); setShowApport(true); }}
             className="btn-primary text-xs px-4 py-2 flex items-center gap-1.5">
@@ -406,6 +506,27 @@ export default function TresoreriePage() {
         </div>
       )}
 
+      {/* ── Retraits récents ─────────────────────────────────────────────────── */}
+      {retraits.length > 0 && (
+        <div className="card p-5">
+          <h3 className="font-semibold text-slate-200 mb-4 flex items-center gap-2">
+            <Minus className="w-4 h-4 text-red-400" />
+            Retraits DG récents
+          </h3>
+          <div className="space-y-2">
+            {retraits.slice(0, 10).map(rt => (
+              <div key={rt.id} className="flex items-center justify-between py-2 border-b border-dark-700 last:border-0">
+                <div>
+                  <p className="text-sm text-slate-200">{rt.account?.name}</p>
+                  <p className="text-xs text-slate-500">{new Date(rt.date).toLocaleDateString('fr-FR')} {rt.note ? `— ${rt.note}` : ''}</p>
+                </div>
+                <span className="text-red-400 font-semibold text-sm">-{fmt(rt.amount)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ── Modal Apport DG ─────────────────────────────────────────────────── */}
       {showApport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -445,6 +566,51 @@ export default function TresoreriePage() {
               <button type="submit" disabled={savingApport} className="btn-primary min-w-32 flex items-center gap-2 justify-center">
                 {savingApport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                 {savingApport ? 'Enregistrement…' : 'Enregistrer'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ── Modal Retrait DG ─────────────────────────────────────────────────── */}
+      {showRetrait && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <form onSubmit={handleRetrait} className="card w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-slate-200 flex items-center gap-2">
+                <Minus className="w-5 h-5 text-red-400" /> Retrait de fonds
+              </h3>
+              <button type="button" onClick={() => setShowRetrait(false)}>
+                <X className="w-5 h-5 text-slate-500 hover:text-slate-200" />
+              </button>
+            </div>
+
+            <div>
+              <label className="label">Compte</label>
+              <select value={retraitAccId} onChange={e => setRetraitAccId(e.target.value)} className="input">
+                {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Montant (FCFA)</label>
+              <input type="number" value={retraitAmt} onChange={e => setRetraitAmt(e.target.value)}
+                className="input" placeholder="Ex: 200000" required min={1} />
+            </div>
+            <div>
+              <label className="label">Date</label>
+              <input type="date" value={retraitDate} onChange={e => setRetraitDate(e.target.value)} className="input" required />
+            </div>
+            <div>
+              <label className="label">Note (optionnel)</label>
+              <input type="text" value={retraitNote} onChange={e => setRetraitNote(e.target.value)}
+                className="input" placeholder="Ex: Retrait personnel DG" />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button type="button" onClick={() => setShowRetrait(false)} className="btn-secondary">Annuler</button>
+              <button type="submit" disabled={savingRetrait} className="btn-primary min-w-32 flex items-center gap-2 justify-center">
+                {savingRetrait ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                {savingRetrait ? 'Enregistrement…' : 'Enregistrer'}
               </button>
             </div>
           </form>

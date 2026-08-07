@@ -7,6 +7,7 @@ import RecentSales  from '@/components/dashboard/RecentSales';
 import StockAlerts  from '@/components/dashboard/StockAlerts';
 import SalesChart   from '@/components/dashboard/SalesChart';
 import type { DashboardStats, VStockAlert, VSale } from '@/types';
+import { REAPPRO_CATEGORY } from '@/types';
 import {
   TrendingUp, ShoppingBag, Package, AlertTriangle,
   Wallet, RefreshCw, Calendar, Banknote, Smartphone, Building2, ArrowRight, FileDown
@@ -15,6 +16,7 @@ import Link from 'next/link';
 import { formatDateTime } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import type { DailyReportData, DailySaleRow, DailySaleLineRow, DailyCreditRow } from '@/lib/dailyReportPdf';
+import type { PointFinancierData, PointFinancierAccountRow } from '@/lib/pointFinancierPdf';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ChartData { date: string; revenue: number; expenses: number; }
@@ -137,6 +139,7 @@ export default function DashboardClient({
   const [loadingP,   setLoadingP]   = useState(false);
   const [treasury,   setTreasury]   = useState<{ name: string; type: string; solde: number }[]>([]);
   const [exportingDaily, setExportingDaily] = useState(false);
+  const [exportingPF,    setExportingPF]    = useState(false);
 
   // ── Fetches stats for a given period ────────────────────────────────────────
   const fetchPeriodStats = useCallback(async (p: Period) => {
@@ -185,22 +188,45 @@ export default function DashboardClient({
       { data: allSales },
       { data: allExpenses },
       { data: allApports },
+      { data: allRetraitsAll },
       { data: allAvoirs },
+      { data: allTrocsAll },
+      { data: settledSalesAll },
+      { data: settledTrocsAll },
+      { data: settledInitialesAll },
     ] = await Promise.all([
       supabase.from('treasury_accounts').select('id,name,type,payment_keys,initial_balance'),
       supabase.from('sales').select('total,payment_method').neq('payment_method','credit'),
       supabase.from('expenses').select('amount,payment_method'),
       supabase.from('treasury_apports').select('amount,account_id'),
+      supabase.from('treasury_retraits').select('amount,account_id'),
       supabase.from('sale_avoirs').select('total,sale:sales(payment_method)'),
+      supabase.from('trocs').select('complement,payment_method'),
+      supabase.from('sales').select('settled_amount,settled_account_id').not('settled_account_id', 'is', null),
+      supabase.from('trocs').select('settled_amount,settled_account_id').not('settled_account_id', 'is', null),
+      supabase.from('creances_initiales').select('settled_amount,settled_account_id').not('settled_account_id', 'is', null),
     ]);
+
+    const settledAll = [
+      ...(settledSalesAll ?? []), ...(settledTrocsAll ?? []), ...(settledInitialesAll ?? []),
+    ] as { settled_amount: number | null; settled_account_id: string | null }[];
 
     const treasuryData = (treasuryAccs ?? []).map((acc: Record<string, unknown>) => {
       const keys = acc.payment_keys as string[];
-      const salesIn   = (allSales    ?? []).filter((s: Record<string, unknown>) => keys.includes(s.payment_method as string)).reduce((s: number, x: Record<string, unknown>) => s + ((x.total as number) ?? 0), 0);
-      const expOut    = (allExpenses ?? []).filter((e: Record<string, unknown>) => keys.includes(e.payment_method as string)).reduce((s: number, x: Record<string, unknown>) => s + ((x.amount as number) ?? 0), 0);
-      const apportsIn = (allApports  ?? []).filter((a: Record<string, unknown>) => a.account_id === acc.id).reduce((s: number, x: Record<string, unknown>) => s + ((x.amount as number) ?? 0), 0);
-      const avoirsOut = (allAvoirs   ?? []).filter((av: Record<string, unknown>) => { const pm = (av.sale as Record<string, unknown> | null)?.payment_method as string; return pm && keys.includes(pm); }).reduce((s: number, x: Record<string, unknown>) => s + ((x.total as number) ?? 0), 0);
-      return { name: acc.name as string, type: acc.type as string, solde: (acc.initial_balance as number) + salesIn + apportsIn - expOut - avoirsOut };
+      const salesIn    = (allSales    ?? []).filter((s: Record<string, unknown>) => keys.includes(s.payment_method as string)).reduce((s: number, x: Record<string, unknown>) => s + ((x.total as number) ?? 0), 0);
+      const expOut     = (allExpenses ?? []).filter((e: Record<string, unknown>) => keys.includes(e.payment_method as string)).reduce((s: number, x: Record<string, unknown>) => s + ((x.amount as number) ?? 0), 0);
+      const apportsIn  = (allApports  ?? []).filter((a: Record<string, unknown>) => a.account_id === acc.id).reduce((s: number, x: Record<string, unknown>) => s + ((x.amount as number) ?? 0), 0);
+      const retraitsOut = (allRetraitsAll ?? []).filter((r: Record<string, unknown>) => r.account_id === acc.id).reduce((s: number, x: Record<string, unknown>) => s + ((x.amount as number) ?? 0), 0);
+      const avoirsOut  = (allAvoirs   ?? []).filter((av: Record<string, unknown>) => { const pm = (av.sale as Record<string, unknown> | null)?.payment_method as string; return pm && keys.includes(pm); }).reduce((s: number, x: Record<string, unknown>) => s + ((x.total as number) ?? 0), 0);
+      const trocsForAcc = (allTrocsAll ?? []).filter((t: Record<string, unknown>) => keys.includes(t.payment_method as string));
+      const trocsIn  = trocsForAcc.reduce((s: number, x: Record<string, unknown>) => s + Math.max(0, (x.complement as number) ?? 0), 0);
+      const trocsOut = trocsForAcc.reduce((s: number, x: Record<string, unknown>) => s + Math.max(0, -((x.complement as number) ?? 0)), 0);
+      const reglementsIn = settledAll.filter((r) => r.settled_account_id === acc.id).reduce((s, r) => s + (r.settled_amount ?? 0), 0);
+      return {
+        name: acc.name as string,
+        type: acc.type as string,
+        solde: (acc.initial_balance as number) + salesIn + apportsIn + trocsIn + reglementsIn - expOut - avoirsOut - trocsOut - retraitsOut,
+      };
     });
     setTreasury(treasuryData);
 
@@ -241,7 +267,12 @@ export default function DashboardClient({
         { data: allSales },
         { data: allExpenses },
         { data: allApports },
+        { data: allRetraitsForReport },
         { data: allAvoirsAll },
+        { data: allTrocsForReport },
+        { data: settledSalesForReport },
+        { data: settledTrocsForReport },
+        { data: settledInitialesForReport },
       ] = await Promise.all([
         supabase.from('v_sales').select('*').gte('created_at', fromIso).lte('created_at', toIso).order('created_at'),
         supabase.from('sale_items').select('sale_id, qty, unit_price, total, product:products(name), sale:sales!inner(created_at)')
@@ -254,8 +285,17 @@ export default function DashboardClient({
         supabase.from('sales').select('total,payment_method,created_at').neq('payment_method', 'credit'),
         supabase.from('expenses').select('amount,payment_method,expense_date'),
         supabase.from('treasury_apports').select('amount,account_id,date'),
+        supabase.from('treasury_retraits').select('amount,account_id,date'),
         supabase.from('sale_avoirs').select('total,created_at,sale:sales(payment_method)'),
+        supabase.from('trocs').select('complement,payment_method,created_at'),
+        supabase.from('sales').select('settled_amount,settled_account_id,settled_at').not('settled_account_id', 'is', null),
+        supabase.from('trocs').select('settled_amount,settled_account_id,settled_at').not('settled_account_id', 'is', null),
+        supabase.from('creances_initiales').select('settled_amount,settled_account_id,settled_at').not('settled_account_id', 'is', null),
       ]);
+
+      const settledForReport = [
+        ...(settledSalesForReport ?? []), ...(settledTrocsForReport ?? []), ...(settledInitialesForReport ?? []),
+      ] as { settled_amount: number | null; settled_account_id: string | null; settled_at: string | null }[];
 
       // ── Ventes + avoirs fusionnés ──────────────────────────────────────────
       const salesRows: DailySaleRow[] = (todaySales ?? []).map((s: Record<string, unknown>) => ({
@@ -391,11 +431,35 @@ export default function DashboardClient({
           if (dt >= fromIso && dt <= toIso) duringSorties += (av.total as number) ?? 0;
           else if (dt < fromIso) beforeSorties += (av.total as number) ?? 0;
         });
+        (allTrocsForReport ?? []).forEach((t: Record<string, unknown>) => {
+          if (!keys.includes(t.payment_method as string)) return;
+          const dt = t.created_at as string;
+          const c = (t.complement as number) ?? 0;
+          const inPeriod = dt >= fromIso && dt <= toIso;
+          if (c >= 0) {
+            if (inPeriod) duringEntrees += c; else if (dt < fromIso) beforeEntrees += c;
+          } else {
+            const abs = Math.abs(c);
+            if (inPeriod) duringSorties += abs; else if (dt < fromIso) beforeSorties += abs;
+          }
+        });
+        settledForReport.forEach((r) => {
+          if (r.settled_account_id !== acc.id || !r.settled_at) return;
+          const amt = r.settled_amount ?? 0;
+          if (r.settled_at >= fromIso && r.settled_at <= toIso) duringEntrees += amt;
+          else if (r.settled_at < fromIso) beforeEntrees += amt;
+        });
         (allApports ?? []).forEach((ap: Record<string, unknown>) => {
           if (ap.account_id !== acc.id) return;
           const dt = (ap.date as string) + 'T00:00:00.000Z';
           if (dt >= fromIso && dt <= toIso) duringEntrees += (ap.amount as number) ?? 0;
           else if (dt < fromIso) beforeEntrees += (ap.amount as number) ?? 0;
+        });
+        (allRetraitsForReport ?? []).forEach((rt: Record<string, unknown>) => {
+          if (rt.account_id !== acc.id) return;
+          const dt = (rt.date as string) + 'T00:00:00.000Z';
+          if (dt >= fromIso && dt <= toIso) duringSorties += (rt.amount as number) ?? 0;
+          else if (dt < fromIso) beforeSorties += (rt.amount as number) ?? 0;
         });
 
         const soldeDebut = (acc.initial_balance as number) + beforeEntrees - beforeSorties;
@@ -431,6 +495,137 @@ export default function DashboardClient({
       await generateDailyReportPDF(reportData);
     } finally {
       setExportingDaily(false);
+    }
+  }, [supabase]);
+
+  // ── Point financier (PDF) ────────────────────────────────────────────────────
+  const handlePointFinancier = useCallback(async () => {
+    setExportingPF(true);
+    try {
+      const now      = new Date();
+      const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const dateStr  = localDateStr(now);
+      const fromIso  = dayStart.toISOString();
+      const toIso    = now.toISOString();
+
+      const [
+        { data: treasuryAccs },
+        { data: allSales },
+        { data: allTrocs },
+        { data: allExpenses },
+        { data: allApports },
+        { data: allRetraits },
+        { data: allAvoirs },
+        { data: settledSales },
+        { data: settledTrocs },
+        { data: settledInitiales },
+      ] = await Promise.all([
+        supabase.from('treasury_accounts').select('id,name,type,payment_keys,initial_balance').order('type'),
+        supabase.from('sales').select('total,payment_method,created_at').neq('payment_method', 'credit'),
+        supabase.from('trocs').select('complement,payment_method,created_at'),
+        supabase.from('expenses').select('amount,payment_method,expense_date,category:expense_categories(name)'),
+        supabase.from('treasury_apports').select('amount,account_id,date'),
+        supabase.from('treasury_retraits').select('amount,account_id,date'),
+        supabase.from('sale_avoirs').select('total,created_at,sale:sales(payment_method)'),
+        supabase.from('sales').select('settled_amount,settled_account_id,settled_at').not('settled_account_id', 'is', null),
+        supabase.from('trocs').select('settled_amount,settled_account_id,settled_at').not('settled_account_id', 'is', null),
+        supabase.from('creances_initiales').select('settled_amount,settled_account_id,settled_at').not('settled_account_id', 'is', null),
+      ]);
+
+      const settledRows = [
+        ...(settledSales ?? []), ...(settledTrocs ?? []), ...(settledInitiales ?? []),
+      ] as { settled_amount: number | null; settled_account_id: string | null; settled_at: string | null }[];
+
+      const accounts: PointFinancierAccountRow[] = (treasuryAccs ?? []).map((acc: Record<string, unknown>) => {
+        const keys = acc.payment_keys as string[];
+        const accId = acc.id as string;
+
+        let beforeIn = 0, beforeOut = 0;
+        let encaissementVentes = 0, complementTrocs = 0, decaissementsTrocs = 0;
+        let decaissementsAchats = 0, autresDepenses = 0;
+
+        (allSales ?? []).forEach((s: Record<string, unknown>) => {
+          if (!keys.includes(s.payment_method as string)) return;
+          const dt = s.created_at as string;
+          const amt = (s.total as number) ?? 0;
+          if (dt >= fromIso && dt <= toIso) encaissementVentes += amt;
+          else if (dt < fromIso) beforeIn += amt;
+        });
+
+        (allTrocs ?? []).forEach((t: Record<string, unknown>) => {
+          if (!keys.includes(t.payment_method as string)) return;
+          const dt = t.created_at as string;
+          const c = (t.complement as number) ?? 0;
+          const inPeriod = dt >= fromIso && dt <= toIso;
+          if (c >= 0) {
+            if (inPeriod) complementTrocs += c; else if (dt < fromIso) beforeIn += c;
+          } else {
+            const abs = Math.abs(c);
+            if (inPeriod) decaissementsTrocs += abs; else if (dt < fromIso) beforeOut += abs;
+          }
+        });
+
+        (allExpenses ?? []).forEach((e: Record<string, unknown>) => {
+          if (!keys.includes(e.payment_method as string)) return;
+          const dt = (e.expense_date as string) + 'T00:00:00.000Z';
+          const amt = (e.amount as number) ?? 0;
+          const cat = Array.isArray(e.category) ? e.category[0] : e.category as Record<string, unknown> | null;
+          const isReappro = (cat?.name as string | undefined) === REAPPRO_CATEGORY;
+          const inPeriod = e.expense_date === dateStr;
+          if (inPeriod) {
+            if (isReappro) decaissementsAchats += amt; else autresDepenses += amt;
+          } else if (dt < fromIso) beforeOut += amt;
+        });
+
+        (allAvoirs ?? []).forEach((av: Record<string, unknown>) => {
+          const pm = (av.sale as Record<string, unknown> | null)?.payment_method as string;
+          if (!pm || !keys.includes(pm)) return;
+          const dt = av.created_at as string;
+          const amt = (av.total as number) ?? 0;
+          if (dt >= fromIso && dt <= toIso) autresDepenses += amt;
+          else if (dt < fromIso) beforeOut += amt;
+        });
+
+        let apportsDG = 0, retraitDG = 0;
+        (allApports ?? []).forEach((ap: Record<string, unknown>) => {
+          if (ap.account_id !== accId) return;
+          const dt = (ap.date as string) + 'T00:00:00.000Z';
+          const amt = (ap.amount as number) ?? 0;
+          if (ap.date === dateStr) apportsDG += amt; else if (dt < fromIso) beforeIn += amt;
+        });
+        (allRetraits ?? []).forEach((rt: Record<string, unknown>) => {
+          if (rt.account_id !== accId) return;
+          const dt = (rt.date as string) + 'T00:00:00.000Z';
+          const amt = (rt.amount as number) ?? 0;
+          if (rt.date === dateStr) retraitDG += amt; else if (dt < fromIso) beforeOut += amt;
+        });
+
+        let reglementsClients = 0;
+        settledRows.forEach((r) => {
+          if (r.settled_account_id !== accId || !r.settled_at) return;
+          const amt = r.settled_amount ?? 0;
+          if (r.settled_at >= fromIso && r.settled_at <= toIso) reglementsClients += amt;
+          else if (r.settled_at < fromIso) beforeIn += amt;
+        });
+
+        const soldeInitial = (acc.initial_balance as number) + beforeIn - beforeOut;
+        const totalEntrees = encaissementVentes + complementTrocs + apportsDG + reglementsClients;
+        const totalSorties = decaissementsAchats + decaissementsTrocs + retraitDG + autresDepenses;
+        const soldeFinal = soldeInitial + totalEntrees - totalSorties;
+
+        return {
+          name: acc.name as string,
+          soldeInitial, encaissementVentes, complementTrocs, apportsDG, reglementsClients,
+          decaissementsAchats, decaissementsTrocs, retraitDG, autresDepenses, soldeFinal,
+        };
+      });
+
+      const reportData: PointFinancierData = { date: dateStr, accounts };
+
+      const { generatePointFinancierPDF } = await import('@/lib/pointFinancierPdf');
+      await generatePointFinancierPDF(reportData);
+    } finally {
+      setExportingPF(false);
     }
   }, [supabase]);
 
@@ -503,6 +698,14 @@ export default function DashboardClient({
           >
             <FileDown className="w-3.5 h-3.5" />
             {exportingDaily ? 'Génération…' : 'Rapport du jour'}
+          </button>
+          <button
+            onClick={handlePointFinancier}
+            disabled={exportingPF}
+            className="btn-secondary py-1.5 text-xs ml-1"
+          >
+            <Wallet className="w-3.5 h-3.5" />
+            {exportingPF ? 'Génération…' : 'Point financier'}
           </button>
         </div>
       </div>
