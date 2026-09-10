@@ -218,14 +218,20 @@ export default function VentesPage() {
 
     const { data: { user } } = await supabase.auth.getUser();
 
+    // Une vente à crédit dont l'acompte couvre déjà le total est soldée dès
+    // la saisie — sinon elle reste indéfiniment affichée comme créance
+    // ouverte pour son montant total (bug corrigé le 2026-09-10).
+    const isCreditSettledByAcompte = paymentMethod === 'credit' && acompte >= total;
+    const isSettled = paymentMethod !== 'credit' || isCreditSettledByAcompte;
+
     const { data: sale, error } = await supabase.from('sales').insert({
       seller_id:       user!.id,
       payment_method:  paymentMethod,
       notes:           notes || null,
       client_id:       clientId || null,
       client_name:     clientName || null,
-      credit_due_date: paymentMethod === 'credit' ? creditDueDate || null : null,
-      is_settled:      paymentMethod !== 'credit',
+      credit_due_date: paymentMethod === 'credit' && !isCreditSettledByAcompte ? creditDueDate || null : null,
+      is_settled:      isSettled,
       sale_date:       saleDate,
       acompte:         paymentMethod === 'credit' ? acompte : 0,
     }).select('id').single();
@@ -303,31 +309,35 @@ export default function VentesPage() {
     const { data: { user } } = await supabase.auth.getUser();
 
     // Créer l'avoir
-    await supabase.from('sale_avoirs').insert({
+    const { error: avoirErr } = await supabase.from('sale_avoirs').insert({
       sale_id:    avoirSale.id,
       reason:     avoirReason.trim(),
       total:      avoirSale.total,
       created_by: user!.id,
     });
 
-    // Récupérer les lignes de la vente pour remettre en stock
-    const { data: items } = await supabase
-      .from('sale_items')
-      .select('product_id, qty')
-      .eq('sale_id', avoirSale.id);
+    if (avoirErr) {
+      setAvoirSaving(false);
+      setError(`Erreur lors de la création de l'avoir : ${avoirErr.message}`);
+      setTimeout(() => setError(''), 8000);
+      return;
+    }
 
-    if (items && items.length > 0) {
-      await supabase.from('stock_movements').insert(
-        items.map((item: { product_id: string; qty: number }) => ({
-          product_id:     item.product_id,
-          type:           'entree',
-          qty:            item.qty,
-          reference_id:   avoirSale.id,
-          reference_type: 'avoir',
-          notes:          `Avoir sur vente ${avoirSale.sale_number}`,
-          created_by:     user!.id,
-        }))
-      );
+    // La réintégration du stock est faite côté base par le trigger
+    // after_avoir_insert_restore_stock (supabase/migrations/
+    // 008_data_integrity.sql), qui insère les mouvements 'entree'
+    // correspondants dans la même transaction que l'avoir. Ne pas le
+    // refaire ici : les deux mécanismes combinés compteraient chaque
+    // réintégration deux fois (même bug que le double comptage de stock
+    // des trocs, corrigé le 2026-09-10 — voir MÉT-1 / DB-E5 de l'audit).
+    // ⚠️ Cette page dépend donc de la migration 008 : si elle n'est pas
+    // appliquée sur la base, les avoirs ne restaurent plus le stock.
+
+    // Une vente annulée par avoir ne doit plus apparaître comme créance
+    // active (bug corrigé le 2026-09-10) : si elle était à crédit et non
+    // soldée, on la marque soldée puisque la transaction n'existe plus.
+    if (avoirSale.payment_method === 'credit' && !avoirSale.is_settled) {
+      await supabase.from('sales').update({ is_settled: true }).eq('id', avoirSale.id);
     }
 
     // Notification WhatsApp

@@ -16,6 +16,13 @@ function fmt(n: number) {
   return new Intl.NumberFormat('fr-FR').format(n) + ' FCFA';
 }
 
+// Solde réellement dû = montant de la vente/troc net de l'acompte déjà
+// reçu. c.amount seul surestime la créance dès qu'un acompte a été versé
+// (bug corrigé le 2026-09-10).
+function remaining(c: VCreance) {
+  return c.amount - (c.acompte ?? 0);
+}
+
 type Tab = 'creances' | 'dettes';
 
 // ─── Types situations initiales ───────────────────────────────────────────────
@@ -282,8 +289,8 @@ export default function CreancesPage() {
   }
 
   // ── Totaux ──────────────────────────────────────────────────────────────────
-  const totalCreances        = creances.filter(c => !c.is_settled).reduce((s, c) => s + c.amount, 0);
-  const totalCreancesOverdue = creances.filter(c => c.is_overdue).reduce((s, c) => s + c.amount, 0);
+  const totalCreances        = creances.filter(c => !c.is_settled).reduce((s, c) => s + remaining(c), 0);
+  const totalCreancesOverdue = creances.filter(c => c.is_overdue).reduce((s, c) => s + remaining(c), 0);
   const totalInitiales       = initiales.filter(i => !i.is_settled).reduce((s, i) => s + i.amount, 0);
   const totalDettes          = dettes.filter(d => !d.is_settled).reduce((s, d) => s + d.amount, 0);
   const totalDettesOverdue   = dettes.filter(d => d.is_overdue).reduce((s, d) => s + d.amount, 0);
@@ -647,9 +654,11 @@ export default function CreancesPage() {
                         ) : <span className="text-slate-600 text-xs">—</span>}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <p className="font-semibold text-white">{fmt(c.amount)}</p>
+                        <p className="font-semibold text-white">{fmt(remaining(c))}</p>
                         {(c.acompte ?? 0) > 0 && (
-                          <p className="text-xs text-emerald-400 mt-0.5">Acompte : {fmt(c.acompte!)}</p>
+                          <p className="text-xs text-emerald-400 mt-0.5">
+                            Acompte {fmt(c.acompte!)} sur {fmt(c.amount)}
+                          </p>
                         )}
                       </td>
                       <td className="px-4 py-3 text-center">
@@ -664,8 +673,8 @@ export default function CreancesPage() {
                               setSettleAccountId(accounts[0]?.id ?? '');
                               setConfirmSettle({
                                 label: c.client_name ?? 'Client inconnu',
-                                amount: c.amount,
-                                onConfirm: (accountId) => settleCreance(c.id, c.type, accountId, c.amount),
+                                amount: remaining(c),
+                                onConfirm: (accountId) => settleCreance(c.id, c.type, accountId, remaining(c)),
                               });
                             }}
                             disabled={saving === c.id}
