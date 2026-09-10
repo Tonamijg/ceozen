@@ -38,6 +38,23 @@ const NEON_PALETTE = [
   '#10b981', '#f59e0b', '#ef4444', '#3b82f6',
 ];
 
+// period.from/period.to sont des dates locales "YYYY-MM-DD" (input date du
+// navigateur). Les envoyer telles quelles en filtre sur une colonne
+// timestamptz (created_at) — sans suffixe de fuseau — fait interpréter la
+// borne comme minuit UTC par Postgres, pas minuit local : pour un magasin
+// en UTC+1, une vente faite entre minuit et 1h du matin heure locale
+// pouvait se retrouver comptée dans le rapport du jour précédent (bug
+// corrigé le 2026-09-10). On construit explicitement les bornes en heure
+// locale du navigateur.
+function localDayStartISO(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, (m ?? 1) - 1, d ?? 1, 0, 0, 0, 0).toISOString();
+}
+function localDayEndISO(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, (m ?? 1) - 1, d ?? 1, 23, 59, 59, 999).toISOString();
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function BarTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
@@ -79,8 +96,8 @@ export default function RapportsPage() {
   const load = useCallback(async () => {
     setLoading(true);
 
-    const from = period.from + 'T00:00:00';
-    const to   = period.to   + 'T23:59:59';
+    const from = localDayStartISO(period.from);
+    const to   = localDayEndISO(period.to);
 
     const [{ data: salesData }, { data: trocsData }, { data: expData }, { data: items }, { data: salesWithSeller }, { data: expenses }, { data: stock }] =
       await Promise.all([

@@ -15,18 +15,6 @@ function fmt(n: number) {
   return new Intl.NumberFormat('fr-FR').format(Math.round(n)) + ' FCFA';
 }
 
-async function getNextTrocNumber(supabase: ReturnType<typeof createClient>): Promise<string> {
-  const { data } = await supabase
-    .from('trocs')
-    .select('troc_number')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (!data?.troc_number) return 'TR-001';
-  const last = parseInt(data.troc_number.replace('TR-', ''), 10);
-  return `TR-${String(last + 1).padStart(3, '0')}`;
-}
-
 export default function TrocsPage() {
   const supabase = createClient();
 
@@ -145,9 +133,9 @@ export default function TrocsPage() {
     if (!selectedProd || !receivedName || !givenPrice || !receivedValue) return;
     setSaving(true);
     try {
-      const trocNumber = await getNextTrocNumber(supabase);
-
-      // API route service_role (bypasse RLS pour products + stock)
+      // API route service_role (bypasse RLS pour products + stock) — le
+      // numéro de troc est désormais généré côté serveur via une séquence
+      // Postgres atomique (voir /api/troc/create), plus côté client.
       const res = await fetch('/api/troc/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -155,18 +143,17 @@ export default function TrocsPage() {
           clientName, clientPhone,
           selectedProdId:    selectedProd.id,
           selectedProdName:  selectedProd.name,
-          selectedProdStock: selectedProd.stock_qty,
           givenPrice,
           receivedName, receivedRef, receivedValue,
           complement: String(complement),
           acompte: acompte || '0',
           paymentMethod, creditDueDate, trocDate, notes,
-          trocNumber,
         }),
       });
 
       const result = await res.json();
       if (!res.ok) throw new Error(result.error ?? 'Erreur serveur');
+      const trocNumber = result.trocNumber as string;
 
       // Notification WhatsApp (best-effort)
       fetch('/api/notify', {

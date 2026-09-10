@@ -75,6 +75,19 @@ function fmt(n: number) {
   return new Intl.NumberFormat('fr-FR').format(Math.round(n)) + ' FCFA';
 }
 
+// Les colonnes `date` SQL (expense_date, dates d'apport/retrait) n'ont pas
+// d'heure — les traiter comme minuit UTC (`+ 'T00:00:00.000Z'`) les décale
+// d'une heure par rapport aux bornes de période ci-dessus, qui elles sont
+// construites en heure locale du navigateur. Pour un magasin en UTC+1, une
+// dépense saisie en tout début/fin de journée pouvait donc basculer dans le
+// mauvais bucket "avant"/"pendant" la période (bug corrigé le 2026-09-10).
+// On interprète systématiquement ces dates comme minuit local, comme le
+// reste de cette page.
+function localDateToISO(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, (m ?? 1) - 1, d ?? 1).toISOString();
+}
+
 function accountIcon(type: string) {
   if (type === 'banque')       return Building2;
   if (type === 'mobile_money') return Smartphone;
@@ -217,7 +230,7 @@ export default function TresoreriePage() {
       // Dépenses
       for (const e of allExpenses ?? []) {
         if (!keys.includes(e.payment_method)) continue;
-        const dt = e.expense_date + 'T00:00:00.000Z';
+        const dt = localDateToISO(e.expense_date);
         const inPeriod = (!from || dt >= from) && dt <= to;
         if (inPeriod) duringSorties += e.amount ?? 0;
         else if (!from || dt < from) beforeSorties += e.amount ?? 0;
@@ -259,7 +272,7 @@ export default function TresoreriePage() {
       // Apports DG
       for (const ap of apportsData) {
         if (ap.account_id !== acc.id) continue;
-        const dt = ap.date + 'T00:00:00.000Z';
+        const dt = localDateToISO(ap.date);
         const inPeriod = (!from || dt >= from) && dt <= to;
         if (inPeriod) duringApports += ap.amount ?? 0;
         else if (!from || dt < from) beforeApports += ap.amount ?? 0;
@@ -268,7 +281,7 @@ export default function TresoreriePage() {
       // Retraits DG
       for (const rt of retraitsData) {
         if (rt.account_id !== acc.id) continue;
-        const dt = rt.date + 'T00:00:00.000Z';
+        const dt = localDateToISO(rt.date);
         const inPeriod = (!from || dt >= from) && dt <= to;
         if (inPeriod) duringRetraits += rt.amount ?? 0;
         else if (!from || dt < from) beforeRetraits += rt.amount ?? 0;
