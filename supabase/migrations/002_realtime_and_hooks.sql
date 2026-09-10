@@ -2,11 +2,14 @@
 -- K-Tech Daily — Realtime + Hooks WhatsApp (migration 002)
 -- ============================================================
 
--- Activer Realtime sur les tables principales
--- (à exécuter après avoir activé la réplication dans le Dashboard Supabase)
-alter publication supabase_realtime add table public.sales;
-alter publication supabase_realtime add table public.stock_movements;
-alter publication supabase_realtime add table public.expenses;
+-- Activer Realtime sur les tables principales : déjà fait de façon
+-- idempotente par 002_evolutions.sql (section 9, bloc DO $$ ... EXCEPTION
+-- WHEN duplicate_object). Les 3 lignes ALTER PUBLICATION qui étaient ici
+-- faisaient doublon sans garde d'idempotence — sur une base rejouée depuis
+-- zéro, 002_evolutions.sql (ordre alphabétique "e" < "r") s'exécute en
+-- premier et les ajoute déjà ; ce fichier échouait alors immédiatement sur
+-- "relation already member of publication", avant d'atteindre les index
+-- ci-dessous (DB-E1, corrigé le 2026-09-10).
 
 -- ============================================================
 -- Hook WhatsApp (optionnel — à activer quand Twilio/CallMeBot configuré)
