@@ -39,7 +39,8 @@ export async function POST(req: NextRequest) {
     .from('sale_items').select('product_id, qty').eq('sale_id', sale_id);
 
   if (itemsErr) {
-    return NextResponse.json({ error: itemsErr.message }, { status: 500 });
+    console.error('[delete-sale] sale_items:', itemsErr.message);
+    return NextResponse.json({ error: 'Erreur lors de la lecture des articles de la vente.' }, { status: 500 });
   }
 
   // 4. Insérer mouvements stock positifs (entrée = restauration)
@@ -56,7 +57,8 @@ export async function POST(req: NextRequest) {
       }))
     );
     if (mvtErr) {
-      return NextResponse.json({ error: mvtErr.message }, { status: 500 });
+      console.error('[delete-sale] stock_movements:', mvtErr.message);
+      return NextResponse.json({ error: 'Erreur lors de la restauration du stock.' }, { status: 500 });
     }
   }
 
@@ -65,7 +67,8 @@ export async function POST(req: NextRequest) {
     .from('sale_avoirs').delete().eq('sale_id', sale_id);
 
   if (avoirErr) {
-    return NextResponse.json({ error: avoirErr.message }, { status: 500 });
+    console.error('[delete-sale] sale_avoirs:', avoirErr.message);
+    return NextResponse.json({ error: 'Erreur lors de la suppression des avoirs liés.' }, { status: 500 });
   }
 
   // 6. Supprimer la vente (cascade → sale_items auto)
@@ -73,7 +76,8 @@ export async function POST(req: NextRequest) {
     .from('sales').delete().eq('id', sale_id);
 
   if (saleErr) {
-    return NextResponse.json({ error: saleErr.message }, { status: 500 });
+    console.error('[delete-sale] sales:', saleErr.message);
+    return NextResponse.json({ error: 'Erreur lors de la suppression de la vente.' }, { status: 500 });
   }
 
   return NextResponse.json({ success: true });

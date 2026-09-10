@@ -3,6 +3,7 @@
 // Reçoit les événements du front et envoie la notif WhatsApp
 // ============================================================
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient as createServerClient } from '@/lib/supabase/server';
 import {
   notifyVente, notifyAvoir, notifyDepense,
   notifyEntreeStock, notifySortieStock,
@@ -10,13 +11,15 @@ import {
 } from '@/lib/whatsapp';
 
 export async function POST(req: NextRequest) {
+  const authClient = await createServerClient();
+  const { data: { user } } = await authClient.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+  }
+
   try {
     const body = await req.json();
     const { type, data } = body;
-
-    console.log('[/api/notify] Reçu :', type);
-    console.log('[/api/notify] ENV RESEND_API_KEY:', process.env.RESEND_API_KEY ? '✅ présent' : '❌ ABSENT');
-    console.log('[/api/notify] ENV NOTIFY_EMAIL:', process.env.NOTIFY_EMAIL ?? '❌ ABSENT');
 
     let ok = false;
     switch (type) {

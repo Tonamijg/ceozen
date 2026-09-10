@@ -41,6 +41,14 @@ export async function POST(req: NextRequest) {
   const acompteNum       = parseFloat(acompte ?? '0') || 0;
   const isSettled        = acompteNum >= complementNum;
 
+  if (
+    !Number.isFinite(givenPriceNum) || givenPriceNum < 0 ||
+    !Number.isFinite(receivedValueNum) || receivedValueNum < 0 ||
+    !Number.isFinite(acompteNum) || acompteNum < 0
+  ) {
+    return NextResponse.json({ error: 'Montants invalides.' }, { status: 400 });
+  }
+
   try {
     const { error: trocErr } = await admin.from('trocs').update({
       client_name:             clientName  || null,
@@ -57,7 +65,7 @@ export async function POST(req: NextRequest) {
       troc_date:                trocDate || null,
       notes:                    notes || null,
     }).eq('id', trocId);
-    if (trocErr) throw new Error(`Troc: ${trocErr.message}`);
+    if (trocErr) throw trocErr;
 
     // Synchronise le produit "reprise" lié (best-effort — ne bloque pas la correction si absent)
     if (productReceivedId) {
@@ -70,7 +78,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : String(e);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('[troc/update]', e);
+    return NextResponse.json({ error: 'Erreur lors de la mise à jour du troc.' }, { status: 500 });
   }
 }

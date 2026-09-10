@@ -16,6 +16,19 @@ function fmt(n: number) {
   return new Intl.NumberFormat('fr-FR').format(Math.round(n)) + ' FCFA';
 }
 
+// Les valeurs passées à emailTemplate() proviennent de saisies utilisateur
+// (nom client, description, motif...) et sont interpolées directement dans
+// le HTML de l'email — échapper pour éviter toute injection HTML.
+function esc(v: unknown): string {
+  if (v === null || v === undefined) return '';
+  return String(v)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 async function sendEmail(subject: string, html: string): Promise<boolean> {
   const primary = process.env.NOTIFY_EMAIL;
   if (!process.env.RESEND_API_KEY || !primary) {
@@ -63,8 +76,8 @@ function emailTemplate(title: string, emoji: string, color: string, rows: [strin
     .map(
       ([label, value]) => `
       <tr>
-        <td style="padding:8px 12px;color:#94a3b8;font-size:14px;border-bottom:1px solid #1e293b;">${label}</td>
-        <td style="padding:8px 12px;color:#f1f5f9;font-size:14px;font-weight:600;border-bottom:1px solid #1e293b;text-align:right;">${value}</td>
+        <td style="padding:8px 12px;color:#94a3b8;font-size:14px;border-bottom:1px solid #1e293b;">${esc(label)}</td>
+        <td style="padding:8px 12px;color:#f1f5f9;font-size:14px;font-weight:600;border-bottom:1px solid #1e293b;text-align:right;">${esc(value)}</td>
       </tr>`
     )
     .join('');

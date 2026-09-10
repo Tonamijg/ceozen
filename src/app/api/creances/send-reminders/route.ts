@@ -3,11 +3,26 @@
 // Envoie un email récapitulatif des créances & dettes en retard
 // ============================================================
 import { NextResponse } from 'next/server';
+import { createClient as createServerClient } from '@/lib/supabase/server';
 import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 
 function fmt(n: number) {
   return new Intl.NumberFormat('fr-FR').format(Math.round(n)) + ' FCFA';
+}
+
+// Les champs client_name / description / supplier_name sont saisis par les
+// utilisateurs et interpolés directement dans le HTML de l'email — sans
+// échappement, un nom contenant "<img src=x onerror=...>" s'exécuterait
+// dans le client mail du destinataire.
+function esc(v: unknown): string {
+  if (v === null || v === undefined) return '';
+  return String(v)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function formatDate(s: string) {
@@ -16,6 +31,17 @@ function formatDate(s: string) {
 }
 
 export async function POST() {
+  // Contrôle d'authentification propre à la route — ne pas dépendre
+  // uniquement du middleware global (qui ne vérifie que l'authentification,
+  // jamais le rôle). Cette route ne fait qu'envoyer un récapitulatif interne,
+  // donc tout utilisateur authentifié suffit, mais le contrôle doit rester
+  // explicite ici (défense en profondeur).
+  const authClient = await createServerClient();
+  const { data: { user } } = await authClient.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+  }
+
   const resendKey  = process.env.RESEND_API_KEY;
   const notifyEmail = process.env.NOTIFY_EMAIL;
 
@@ -63,8 +89,8 @@ export async function POST() {
     items.map(item => {
       if (type === 'creance') {
         return `<tr style="border-bottom:1px solid #2a2a3a;">
-          <td style="padding:8px 12px;font-family:monospace;color:#00d4ff;">${item.reference_number}</td>
-          <td style="padding:8px 12px;color:#e2e8f0;">${item.client_name ?? '—'}</td>
+          <td style="padding:8px 12px;font-family:monospace;color:#00d4ff;">${esc(item.reference_number)}</td>
+          <td style="padding:8px 12px;color:#e2e8f0;">${esc(item.client_name) || '—'}</td>
           <td style="padding:8px 12px;color:#94a3b8;">${formatDate(item.credit_due_date as string ?? '')}</td>
           <td style="padding:8px 12px;text-align:right;font-weight:700;color:#fff;">${fmt(item.amount as number)}</td>
         </tr>`;
@@ -72,15 +98,15 @@ export async function POST() {
       if (type === 'initiale') {
         return `<tr style="border-bottom:1px solid #2a2a3a;">
           <td style="padding:8px 12px;color:#a78bfa;">Situation initiale</td>
-          <td style="padding:8px 12px;color:#e2e8f0;">${item.client_name}</td>
+          <td style="padding:8px 12px;color:#e2e8f0;">${esc(item.client_name)}</td>
           <td style="padding:8px 12px;color:#94a3b8;">${formatDate(item.since_date as string)} (+60j)</td>
           <td style="padding:8px 12px;text-align:right;font-weight:700;color:#fff;">${fmt(item.amount as number)}</td>
         </tr>`;
       }
       // dette
       return `<tr style="border-bottom:1px solid #2a2a3a;">
-        <td style="padding:8px 12px;color:#e2e8f0;">${item.description}</td>
-        <td style="padding:8px 12px;color:#94a3b8;">${item.supplier_name ?? '—'}</td>
+        <td style="padding:8px 12px;color:#e2e8f0;">${esc(item.description)}</td>
+        <td style="padding:8px 12px;color:#94a3b8;">${esc(item.supplier_name) || '—'}</td>
         <td style="padding:8px 12px;color:#f87171;">${formatDate(item.credit_due_date as string ?? '')}</td>
         <td style="padding:8px 12px;text-align:right;font-weight:700;color:#fff;">${fmt(item.amount as number)}</td>
       </tr>`;
@@ -133,8 +159,8 @@ export async function POST() {
           ${rows(allDettesOverdue as Record<string, unknown>[], 'dette')}
           ${overdueDettesInit.map((d: Record<string, unknown>) => `
             <tr style="border-bottom:1px solid #2a2a3a;">
-              <td style="padding:8px 12px;color:#e2e8f0;">${d.description ?? 'Situation initiale'}</td>
-              <td style="padding:8px 12px;color:#94a3b8;">${d.supplier_name}</td>
+              <td style="padding:8px 12px;color:#e2e8f0;">${esc(d.description) || 'Situation initiale'}</td>
+              <td style="padding:8px 12px;color:#94a3b8;">${esc(d.supplier_name)}</td>
               <td style="padding:8px 12px;color:#f87171;">${formatDate(d.since_date as string)} (+60j)</td>
               <td style="padding:8px 12px;text-align:right;font-weight:700;color:#fff;">${fmt(d.amount as number)}</td>
             </tr>`).join('')}
@@ -159,7 +185,7 @@ export async function POST() {
 
   if (error) {
     console.error('[send-reminders]', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: 'Erreur lors de l\'envoi du rappel.' }, { status: 500 });
   }
 
   const count = overdueCreances.length + overdueInitiales.length + allDettesOverdue.length + overdueDettesInit.length;
