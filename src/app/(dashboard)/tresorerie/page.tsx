@@ -8,35 +8,11 @@ import {
   Banknote, Smartphone, Building2, X, Check
 } from 'lucide-react';
 import { cn, localDateStr, formatCFA } from '@/lib/utils';
+import { fetchTreasuryRawData, computeAccountBalance, type AccountBalance } from '@/lib/treasury';
+import type { TreasuryAccount, TreasuryApport, TreasuryRetrait, TreasuryRawData } from '@/types/treasury';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-interface TreasuryAccount {
-  id: string;
-  name: string;
-  type: 'especes' | 'banque' | 'mobile_money';
-  payment_keys: string[];
-  initial_balance: number;
-}
-
-interface Apport {
-  id: string;
-  account_id: string;
-  amount: number;
-  date: string;
-  note: string | null;
-  created_at: string;
-  account?: { name: string };
-}
-
-interface Retrait {
-  id: string;
-  account_id: string;
-  amount: number;
-  date: string;
-  note: string | null;
-  created_at: string;
-  account?: { name: string };
-}
+type Apport = TreasuryApport;
+type Retrait = TreasuryRetrait;
 
 type Period = 'today' | 'week' | 'month' | 'year' | 'all';
 
@@ -71,19 +47,6 @@ function getDateRange(period: Period): { from: string | null; to: string } {
   return { from, to };
 }
 
-// Les colonnes `date` SQL (expense_date, dates d'apport/retrait) n'ont pas
-// d'heure — les traiter comme minuit UTC (`+ 'T00:00:00.000Z'`) les décale
-// d'une heure par rapport aux bornes de période ci-dessus, qui elles sont
-// construites en heure locale du navigateur. Pour un magasin en UTC+1, une
-// dépense saisie en tout début/fin de journée pouvait donc basculer dans le
-// mauvais bucket "avant"/"pendant" la période (bug corrigé le 2026-09-10).
-// On interprète systématiquement ces dates comme minuit local, comme le
-// reste de cette page.
-function localDateToISO(dateStr: string): string {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(y, (m ?? 1) - 1, d ?? 1).toISOString();
-}
-
 function accountIcon(type: string) {
   if (type === 'banque')       return Building2;
   if (type === 'mobile_money') return Smartphone;
@@ -111,7 +74,7 @@ export default function TresoreriePage() {
   const [loading,  setLoading]  = useState(true);
 
   // Balances calculées
-  const [balances, setBalances] = useState<Record<string, { debut: number; fin: number; entrees: number; sorties: number; apports: number; retraits: number }>>({});
+  const [balances, setBalances] = useState<Record<string, AccountBalance>>({});
 
   // Modal apport
   const [showApport,   setShowApport]   = useState(false);
@@ -137,58 +100,19 @@ export default function TresoreriePage() {
   // ── Chargement données ─────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
     setLoading(true);
-    const { from, to } = getDateRange(period);
+    const period_ = getDateRange(period);
 
-    // 1. Comptes
-    const { data: accs } = await supabase
-      .from('treasury_accounts')
-      .select('*')
-      .order('type');
+    // Comptes + toutes les lignes brutes nécessaires au calcul (mutualisé
+    // avec le dashboard et les exports PDF — voir src/lib/treasury.ts).
+    const { accounts: accsData, data: rawData } = await fetchTreasuryRawData(supabase);
 
-    // 2. Apports (tous)
-    const { data: allApports } = await supabase
-      .from('treasury_apports')
-      .select('*, account:treasury_accounts(name)')
-      .order('date', { ascending: false });
-
-    // 2bis. Retraits DG (tous)
-    const { data: allRetraits } = await supabase
-      .from('treasury_retraits')
-      .select('*, account:treasury_accounts(name)')
-      .order('date', { ascending: false });
-
-    // 3. Ventes (toutes, hors crédit)
-    const { data: allSales } = await supabase
-      .from('sales')
-      .select('total, payment_method, created_at')
-      .neq('payment_method', 'credit');
-
-    // 4. Dépenses (toutes)
-    const { data: allExpenses } = await supabase
-      .from('expenses')
-      .select('amount, payment_method, expense_date');
-
-    // 5. Avoirs (tous) avec payment_method de la vente originale
-    const { data: allAvoirs } = await supabase
-      .from('sale_avoirs')
-      .select('total, created_at, sale:sales(payment_method)');
-
-    // 6. Trocs (tous) — complement > 0 = encaissement, < 0 = décaissement
-    const { data: allTrocs } = await supabase
-      .from('trocs')
-      .select('complement, payment_method, created_at');
-
-    // 7. Règlements de créances/dettes soldées (compte + montant renseignés à la saisie)
-    const [{ data: settledSales }, { data: settledTrocs }, { data: settledInitiales }] = await Promise.all([
-      supabase.from('sales').select('settled_amount, settled_account_id, settled_at').not('settled_account_id', 'is', null),
-      supabase.from('trocs').select('settled_amount, settled_account_id, settled_at').not('settled_account_id', 'is', null),
-      supabase.from('creances_initiales').select('settled_amount, settled_account_id, settled_at').not('settled_account_id', 'is', null),
+    // Apports/retraits avec le nom du compte joint, pour l'affichage des
+    // listes "récents" ci-dessous (fetchTreasuryRawData ne renvoie que les
+    // colonnes nécessaires au calcul).
+    const [{ data: allApports }, { data: allRetraits }] = await Promise.all([
+      supabase.from('treasury_apports').select('*, account:treasury_accounts(name)').order('date', { ascending: false }),
+      supabase.from('treasury_retraits').select('*, account:treasury_accounts(name)').order('date', { ascending: false }),
     ]);
-    const settledData = [
-      ...(settledSales ?? []), ...(settledTrocs ?? []), ...(settledInitiales ?? []),
-    ] as { settled_amount: number | null; settled_account_id: string | null; settled_at: string | null }[];
-
-    const accsData = (accs ?? []) as TreasuryAccount[];
     const apportsData = (allApports ?? []) as Apport[];
     const retraitsData = (allRetraits ?? []) as Retrait[];
 
@@ -197,103 +121,14 @@ export default function TresoreriePage() {
     setRetraits(retraitsData);
 
     // ── Calcul des soldes ──────────────────────────────────────────────────
-    const computed: Record<string, { debut: number; fin: number; entrees: number; sorties: number; apports: number; retraits: number }> = {};
+    // apportsData/retraitsData ont plus de champs que ce que le calcul
+    // exige (TreasuryRawApport/TreasuryRawRetrait) — compatibles tels
+    // quels, pas besoin de les refetcher séparément pour le calcul.
+    const data: TreasuryRawData = { ...rawData, apports: apportsData, retraits: retraitsData };
 
+    const computed: Record<string, AccountBalance> = {};
     for (const acc of accsData) {
-      const keys = acc.payment_keys;
-
-      // Mouvement avant la période (pour solde début)
-      let beforeEntrees = 0;
-      let beforeSorties = 0;
-      let beforeApports = 0;
-      let beforeRetraits = 0;
-
-      // Mouvement pendant la période
-      let duringEntrees = 0;
-      let duringSorties = 0;
-      let duringApports = 0;
-      let duringRetraits = 0;
-
-      // Ventes
-      for (const s of allSales ?? []) {
-        if (!keys.includes(s.payment_method)) continue;
-        const dt = s.created_at;
-        const inPeriod = (!from || dt >= from) && dt <= to;
-        if (inPeriod) duringEntrees += s.total ?? 0;
-        else if (!from || dt < from) beforeEntrees += s.total ?? 0;
-      }
-
-      // Dépenses
-      for (const e of allExpenses ?? []) {
-        if (!keys.includes(e.payment_method)) continue;
-        const dt = localDateToISO(e.expense_date);
-        const inPeriod = (!from || dt >= from) && dt <= to;
-        if (inPeriod) duringSorties += e.amount ?? 0;
-        else if (!from || dt < from) beforeSorties += e.amount ?? 0;
-      }
-
-      // Avoirs (remboursements)
-      for (const av of allAvoirs ?? []) {
-        const pm = (av.sale as unknown as { payment_method: string } | null)?.payment_method;
-        if (!pm || !keys.includes(pm)) continue;
-        const dt = av.created_at;
-        const inPeriod = (!from || dt >= from) && dt <= to;
-        if (inPeriod) duringSorties += av.total ?? 0;
-        else if (!from || dt < from) beforeSorties += av.total ?? 0;
-      }
-
-      // Trocs (complément) — positif = encaissement, négatif = le magasin rend de l'argent
-      for (const t of allTrocs ?? []) {
-        if (!keys.includes(t.payment_method)) continue;
-        const dt = t.created_at;
-        const inPeriod = (!from || dt >= from) && dt <= to;
-        const c = t.complement ?? 0;
-        if (c >= 0) {
-          if (inPeriod) duringEntrees += c; else if (!from || dt < from) beforeEntrees += c;
-        } else {
-          const abs = Math.abs(c);
-          if (inPeriod) duringSorties += abs; else if (!from || dt < from) beforeSorties += abs;
-        }
-      }
-
-      // Règlements de créances soldées (compte renseigné à la saisie)
-      for (const r of settledData) {
-        if (r.settled_account_id !== acc.id || !r.settled_at) continue;
-        const dt = r.settled_at;
-        const inPeriod = (!from || dt >= from) && dt <= to;
-        const amt = r.settled_amount ?? 0;
-        if (inPeriod) duringEntrees += amt; else if (!from || dt < from) beforeEntrees += amt;
-      }
-
-      // Apports DG
-      for (const ap of apportsData) {
-        if (ap.account_id !== acc.id) continue;
-        const dt = localDateToISO(ap.date);
-        const inPeriod = (!from || dt >= from) && dt <= to;
-        if (inPeriod) duringApports += ap.amount ?? 0;
-        else if (!from || dt < from) beforeApports += ap.amount ?? 0;
-      }
-
-      // Retraits DG
-      for (const rt of retraitsData) {
-        if (rt.account_id !== acc.id) continue;
-        const dt = localDateToISO(rt.date);
-        const inPeriod = (!from || dt >= from) && dt <= to;
-        if (inPeriod) duringRetraits += rt.amount ?? 0;
-        else if (!from || dt < from) beforeRetraits += rt.amount ?? 0;
-      }
-
-      const soldeDebut = acc.initial_balance + beforeEntrees + beforeApports - beforeSorties - beforeRetraits;
-      const soldeFin   = soldeDebut + duringEntrees + duringApports - duringSorties - duringRetraits;
-
-      computed[acc.id] = {
-        debut:    soldeDebut,
-        fin:      soldeFin,
-        entrees:  duringEntrees + duringApports,
-        sorties:  duringSorties + duringRetraits,
-        apports:  duringApports,
-        retraits: duringRetraits,
-      };
+      computed[acc.id] = computeAccountBalance(acc, data, period_);
     }
 
     setBalances(computed);
@@ -363,8 +198,8 @@ export default function TresoreriePage() {
     loadData();
   }
 
-  const totalDebut = Object.values(balances).reduce((s, b) => s + b.debut, 0);
-  const totalFin   = Object.values(balances).reduce((s, b) => s + b.fin,   0);
+  const totalDebut = Object.values(balances).reduce((s, b) => s + b.soldeDebut, 0);
+  const totalFin   = Object.values(balances).reduce((s, b) => s + b.soldeFin,   0);
   const diff       = totalFin - totalDebut;
 
   return (
@@ -440,9 +275,9 @@ export default function TresoreriePage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {accounts.map(acc => {
-            const b = balances[acc.id] ?? { debut: 0, fin: 0, entrees: 0, sorties: 0, apports: 0 };
+            const b = balances[acc.id] ?? { soldeDebut: 0, soldeFin: 0, entrees: 0, sorties: 0, apports: 0, retraits: 0 };
             const Icon = accountIcon(acc.type);
-            const variation = b.fin - b.debut;
+            const variation = b.soldeFin - b.soldeDebut;
             return (
               <div key={acc.id} className="card p-5 space-y-4">
                 {/* Header compte */}
@@ -462,7 +297,7 @@ export default function TresoreriePage() {
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-400">Début de période</span>
-                    <span className="font-mono text-slate-200">{formatCFA(b.debut)}</span>
+                    <span className="font-mono text-slate-200">{formatCFA(b.soldeDebut)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-400">Entrées</span>
@@ -474,8 +309,8 @@ export default function TresoreriePage() {
                   </div>
                   <div className="border-t border-dark-600 pt-2 flex justify-between">
                     <span className="text-sm font-semibold text-slate-200">Solde fin</span>
-                    <span className={cn('font-bold text-sm', b.fin >= 0 ? 'text-neon-blue' : 'text-red-400')}>
-                      {formatCFA(b.fin)}
+                    <span className={cn('font-bold text-sm', b.soldeFin >= 0 ? 'text-neon-blue' : 'text-red-400')}>
+                      {formatCFA(b.soldeFin)}
                     </span>
                   </div>
                 </div>
