@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { formatDateTime, localDateStr, formatCFA, cn } from '@/lib/utils';
+import { fetchTreasuryRawData, computeAccountBalance } from '@/lib/treasury';
 import type { DailyReportData, DailySaleRow, DailySaleLineRow, DailyCreditRow } from '@/lib/dailyReportPdf';
 import type { PointFinancierData, PointFinancierAccountRow } from '@/lib/pointFinancierPdf';
 
@@ -173,51 +174,13 @@ export default function DashboardClient({
     setChart(buildChartData(salesChart ?? [], expensesChart ?? [], chartDays));
 
     // ── Trésorerie : solde actuel (tout jusqu'à maintenant) ──────────────────
-    const [
-      { data: treasuryAccs },
-      { data: allSales },
-      { data: allExpenses },
-      { data: allApports },
-      { data: allRetraitsAll },
-      { data: allAvoirs },
-      { data: allTrocsAll },
-      { data: settledSalesAll },
-      { data: settledTrocsAll },
-      { data: settledInitialesAll },
-    ] = await Promise.all([
-      supabase.from('treasury_accounts').select('id,name,type,payment_keys,initial_balance'),
-      supabase.from('sales').select('total,payment_method').neq('payment_method','credit'),
-      supabase.from('expenses').select('amount,payment_method'),
-      supabase.from('treasury_apports').select('amount,account_id'),
-      supabase.from('treasury_retraits').select('amount,account_id'),
-      supabase.from('sale_avoirs').select('total,sale:sales(payment_method)'),
-      supabase.from('trocs').select('complement,payment_method'),
-      supabase.from('sales').select('settled_amount,settled_account_id').not('settled_account_id', 'is', null),
-      supabase.from('trocs').select('settled_amount,settled_account_id').not('settled_account_id', 'is', null),
-      supabase.from('creances_initiales').select('settled_amount,settled_account_id').not('settled_account_id', 'is', null),
-    ]);
-
-    const settledAll = [
-      ...(settledSalesAll ?? []), ...(settledTrocsAll ?? []), ...(settledInitialesAll ?? []),
-    ] as { settled_amount: number | null; settled_account_id: string | null }[];
-
-    const treasuryData = (treasuryAccs ?? []).map((acc: Record<string, unknown>) => {
-      const keys = acc.payment_keys as string[];
-      const salesIn    = (allSales    ?? []).filter((s: Record<string, unknown>) => keys.includes(s.payment_method as string)).reduce((s: number, x: Record<string, unknown>) => s + ((x.total as number) ?? 0), 0);
-      const expOut     = (allExpenses ?? []).filter((e: Record<string, unknown>) => keys.includes(e.payment_method as string)).reduce((s: number, x: Record<string, unknown>) => s + ((x.amount as number) ?? 0), 0);
-      const apportsIn  = (allApports  ?? []).filter((a: Record<string, unknown>) => a.account_id === acc.id).reduce((s: number, x: Record<string, unknown>) => s + ((x.amount as number) ?? 0), 0);
-      const retraitsOut = (allRetraitsAll ?? []).filter((r: Record<string, unknown>) => r.account_id === acc.id).reduce((s: number, x: Record<string, unknown>) => s + ((x.amount as number) ?? 0), 0);
-      const avoirsOut  = (allAvoirs   ?? []).filter((av: Record<string, unknown>) => { const pm = (av.sale as Record<string, unknown> | null)?.payment_method as string; return pm && keys.includes(pm); }).reduce((s: number, x: Record<string, unknown>) => s + ((x.total as number) ?? 0), 0);
-      const trocsForAcc = (allTrocsAll ?? []).filter((t: Record<string, unknown>) => keys.includes(t.payment_method as string));
-      const trocsIn  = trocsForAcc.reduce((s: number, x: Record<string, unknown>) => s + Math.max(0, (x.complement as number) ?? 0), 0);
-      const trocsOut = trocsForAcc.reduce((s: number, x: Record<string, unknown>) => s + Math.max(0, -((x.complement as number) ?? 0)), 0);
-      const reglementsIn = settledAll.filter((r) => r.settled_account_id === acc.id).reduce((s, r) => s + (r.settled_amount ?? 0), 0);
-      return {
-        name: acc.name as string,
-        type: acc.type as string,
-        solde: (acc.initial_balance as number) + salesIn + apportsIn + trocsIn + reglementsIn - expOut - avoirsOut - trocsOut - retraitsOut,
-      };
-    });
+    const { accounts: treasuryAccs, data: treasuryRaw } = await fetchTreasuryRawData(supabase);
+    const treasuryPeriod = { from: null, to: new Date().toISOString() };
+    const treasuryData = treasuryAccs.map((acc) => ({
+      name: acc.name,
+      type: acc.type,
+      solde: computeAccountBalance(acc, treasuryRaw, treasuryPeriod).soldeFin,
+    }));
     setTreasury(treasuryData);
 
     setLastUpdate(new Date());
