@@ -137,7 +137,7 @@ export interface Expense {
   category_id?: string;
   category?: ExpenseCategory;
   amount: number;
-  description: string;
+  description?: string;
   expense_date: string;
   supplier_name?: string;
   payment_method: PaymentMethod;
@@ -186,7 +186,7 @@ export interface VStockAlert {
   name: string;
   stock_qty: number;
   stock_min: number;
-  category: string;
+  category?: string;
   sell_price: number;
   buy_price: number;
   stock_value: number;
@@ -203,7 +203,7 @@ export interface VCreance {
   client_name?: string;
   credit_due_date?: string;
   is_settled: boolean;
-  creator_name: string;
+  creator_name?: string;
   is_overdue: boolean;
 }
 

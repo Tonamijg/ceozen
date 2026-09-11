@@ -240,7 +240,7 @@ export default function DepensesPage() {
             qty:            -item.qty,
             reference_id:   expense.id,
             reference_type: 'annulation_reappro',
-            notes:          `Annulation réappro : ${expense.description}`,
+            notes:          `Annulation réappro : ${expense.description ?? '—'}`,
             created_by:     user!.id,
           }))
         );
