@@ -13,8 +13,7 @@ import {
   Wallet, RefreshCw, Calendar, Banknote, Smartphone, Building2, ArrowRight, FileDown
 } from 'lucide-react';
 import Link from 'next/link';
-import { formatDateTime } from '@/lib/utils';
-import { cn } from '@/lib/utils';
+import { formatDateTime, localDateStr, formatCFA, cn } from '@/lib/utils';
 import type { DailyReportData, DailySaleRow, DailySaleLineRow, DailyCreditRow } from '@/lib/dailyReportPdf';
 import type { PointFinancierData, PointFinancierAccountRow } from '@/lib/pointFinancierPdf';
 
@@ -29,15 +28,6 @@ const PERIODS: { key: Period; label: string }[] = [
   { key: 'month', label: 'Ce mois'    },
   { key: 'year',  label: 'Cette année'},
 ];
-
-// ─── Helper : date locale YYYY-MM-DD (timezone-safe) ──────────────────────────
-function localDateStr(d: Date): string {
-  return [
-    d.getFullYear(),
-    String(d.getMonth() + 1).padStart(2, '0'),
-    String(d.getDate()).padStart(2, '0'),
-  ].join('-');
-}
 
 // ─── Helper : compute date range from a Period ────────────────────────────────
 function getDateRange(period: Period): { from: string; to: string; fromDate: string; toDate: string; chartDays: number } {
@@ -762,7 +752,7 @@ export default function DashboardClient({
         <div className="card p-5 flex flex-col gap-1">
           <p className="text-xs text-slate-500">Valeur du stock</p>
           <p className="text-xl font-bold text-white">
-            {new Intl.NumberFormat('fr-FR').format(stats.stock_value)} FCFA
+            {formatCFA(stats.stock_value)}
           </p>
         </div>
         <div className="card p-5 flex flex-col gap-1">
@@ -798,7 +788,7 @@ export default function DashboardClient({
                   <div>
                     <p className="text-xs text-slate-500">{t.name}</p>
                     <p className={`font-bold text-sm ${t.solde >= 0 ? 'text-white' : 'text-red-400'}`}>
-                      {new Intl.NumberFormat('fr-FR').format(Math.round(t.solde))} FCFA
+                      {formatCFA(t.solde)}
                     </p>
                   </div>
                 </div>
@@ -808,7 +798,7 @@ export default function DashboardClient({
           <div className="mt-3 pt-3 border-t border-dark-600 flex justify-between items-center">
             <span className="text-xs text-slate-500">Total disponibilités</span>
             <span className="font-bold text-neon-blue">
-              {new Intl.NumberFormat('fr-FR').format(Math.round(treasury.reduce((s, t) => s + t.solde, 0)))} FCFA
+              {formatCFA(treasury.reduce((s, t) => s + t.solde, 0))}
             </span>
           </div>
         </div>

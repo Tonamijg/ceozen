@@ -8,14 +8,10 @@ import {
   AlertTriangle, RefreshCw, Landmark, Plus, X, Loader2,
   Mail, Calendar, Send, Search, Filter
 } from 'lucide-react';
-import { formatDate, localDateStr } from '@/lib/utils';
+import { formatDate, localDateStr, formatCFA } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-function fmt(n: number) {
-  return new Intl.NumberFormat('fr-FR').format(n) + ' FCFA';
-}
-
 // Solde réellement dû = montant de la vente/troc net de l'acompte déjà
 // reçu. c.amount seul surestime la créance dès qu'un acompte a été versé
 // (bug corrigé le 2026-09-10).
@@ -441,7 +437,7 @@ export default function CreancesPage() {
           <p className="text-xs text-slate-500 flex items-center gap-1">
             <ArrowDownLeft className="w-3.5 h-3.5 text-neon-blue" /> Créances en cours
           </p>
-          <p className="text-xl font-bold text-white">{fmt(totalCreances + totalInitiales)}</p>
+          <p className="text-xl font-bold text-white">{formatCFA(totalCreances + totalInitiales)}</p>
           <p className="text-xs text-slate-500">{totalCreancesCount} créance(s)</p>
         </div>
         <div className="card p-4 space-y-1 border-l-2 border-red-500/50">
@@ -449,7 +445,7 @@ export default function CreancesPage() {
             <AlertTriangle className="w-3.5 h-3.5 text-red-400" /> Créances en retard
           </p>
           <p className="text-xl font-bold text-red-400">
-            {fmt(totalCreancesOverdue + initialesOverdue.reduce((s, i) => s + i.amount, 0))}
+            {formatCFA(totalCreancesOverdue + initialesOverdue.reduce((s, i) => s + i.amount, 0))}
           </p>
           <p className="text-xs text-slate-500">
             {creances.filter(c => c.is_overdue).length + initialesOverdue.length} en retard
@@ -459,7 +455,7 @@ export default function CreancesPage() {
           <p className="text-xs text-slate-500 flex items-center gap-1">
             <ArrowUpRight className="w-3.5 h-3.5 text-orange-400" /> Dettes en cours
           </p>
-          <p className="text-xl font-bold text-white">{fmt(totalDettes + totalDettesInit)}</p>
+          <p className="text-xl font-bold text-white">{formatCFA(totalDettes + totalDettesInit)}</p>
           <p className="text-xs text-slate-500">{totalDettesCount} dette(s)</p>
         </div>
         <div className="card p-4 space-y-1 border-l-2 border-red-500/50">
@@ -467,7 +463,7 @@ export default function CreancesPage() {
             <AlertTriangle className="w-3.5 h-3.5 text-red-400" /> Dettes en retard
           </p>
           <p className="text-xl font-bold text-red-400">
-            {fmt(totalDettesOverdue + dettesInitOverdue.reduce((s, d) => s + d.amount, 0))}
+            {formatCFA(totalDettesOverdue + dettesInitOverdue.reduce((s, d) => s + d.amount, 0))}
           </p>
           <p className="text-xs text-slate-500">
             {dettes.filter(d => d.is_overdue).length + dettesInitOverdue.length} en retard
@@ -654,10 +650,10 @@ export default function CreancesPage() {
                         ) : <span className="text-slate-600 text-xs">—</span>}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <p className="font-semibold text-white">{fmt(remaining(c))}</p>
+                        <p className="font-semibold text-white">{formatCFA(remaining(c))}</p>
                         {(c.acompte ?? 0) > 0 && (
                           <p className="text-xs text-emerald-400 mt-0.5">
-                            Acompte {fmt(c.acompte!)} sur {fmt(c.amount)}
+                            Acompte {formatCFA(c.acompte!)} sur {formatCFA(c.amount)}
                           </p>
                         )}
                       </td>
@@ -713,7 +709,7 @@ export default function CreancesPage() {
                             ? <span className="text-red-400 text-xs flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> +60 jours</span>
                             : <span className="text-slate-600 text-xs">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-right font-semibold text-white">{fmt(ini.amount)}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-white">{formatCFA(ini.amount)}</td>
                         <td className="px-4 py-3 text-center">
                           {ini.is_settled ? <span className="badge-green text-xs">Soldé</span>
                             : isOverdue ? <span className="badge-red text-xs">En retard</span>
@@ -747,12 +743,12 @@ export default function CreancesPage() {
                       Total affiché
                       {(search || filterStatus !== 'all' || filterDateFrom || filterDateTo) && (
                         <span className="ml-2 text-slate-600 font-normal">
-                          (sur {fmt(totalCreances + totalInitiales)} total)
+                          (sur {formatCFA(totalCreances + totalInitiales)} total)
                         </span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-right font-bold text-neon-blue">
-                      {fmt(
+                      {formatCFA(
                         filteredCreances.filter(c => !c.is_settled).reduce((s, c) => s + c.amount, 0) +
                         filteredInitiales.filter(i => !i.is_settled).reduce((s, i) => s + i.amount, 0)
                       )}
@@ -816,7 +812,7 @@ export default function CreancesPage() {
                           </span>
                         ) : <span className="text-slate-600 text-xs">—</span>}
                       </td>
-                      <td className="px-4 py-3 text-right font-semibold text-white">{fmt(d.amount)}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-white">{formatCFA(d.amount)}</td>
                       <td className="px-4 py-3 text-center">
                         {d.is_settled ? <span className="badge-green text-xs">Soldé</span>
                           : d.is_overdue ? <span className="badge-red text-xs">En retard</span>
@@ -867,7 +863,7 @@ export default function CreancesPage() {
                             ? <span className="text-red-400 text-xs flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> +60 jours</span>
                             : <span className="text-slate-600 text-xs">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-right font-semibold text-white">{fmt(di.amount)}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-white">{formatCFA(di.amount)}</td>
                         <td className="px-4 py-3 text-center">
                           {di.is_settled ? <span className="badge-green text-xs">Soldé</span>
                             : isOverdue ? <span className="badge-red text-xs">En retard</span>
@@ -901,12 +897,12 @@ export default function CreancesPage() {
                       Total affiché
                       {(search || filterStatus !== 'all' || filterDateFrom || filterDateTo) && (
                         <span className="ml-2 text-slate-600 font-normal">
-                          (sur {fmt(totalDettes + totalDettesInit)} total)
+                          (sur {formatCFA(totalDettes + totalDettesInit)} total)
                         </span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-right font-bold text-orange-400">
-                      {fmt(
+                      {formatCFA(
                         filteredDettes.filter(d => !d.is_settled).reduce((s, d) => s + d.amount, 0) +
                         filteredDettesInit.filter(d => !d.is_settled).reduce((s, d) => s + d.amount, 0)
                       )}
@@ -959,7 +955,7 @@ export default function CreancesPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Montant soldé</span>
-                <span className="font-bold text-emerald-400">{fmt(confirmSettle.amount)}</span>
+                <span className="font-bold text-emerald-400">{formatCFA(confirmSettle.amount)}</span>
               </div>
             </div>
             {accounts.length > 0 && (

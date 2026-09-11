@@ -7,13 +7,9 @@ import {
   ArrowLeftRight, Plus, RefreshCw, X, Check,
   CheckCircle2, Smartphone, Clock, Package, Printer, Edit2
 } from 'lucide-react';
-import { formatDate, cn, localDateStr } from '@/lib/utils';
+import { formatDate, cn, localDateStr, formatCFA } from '@/lib/utils';
 import { printTrocReceipt } from '@/lib/print';
 import { PAYMENT_LABELS } from '@/types';
-
-function fmt(n: number) {
-  return new Intl.NumberFormat('fr-FR').format(Math.round(n)) + ' FCFA';
-}
 
 export default function TrocsPage() {
   const supabase = createClient();
@@ -241,7 +237,7 @@ export default function TrocsPage() {
         </div>
         <div className="card p-4 space-y-1 border-l-2 border-neon-blue/50">
           <p className="text-xs text-slate-500">Compléments encaissés</p>
-          <p className="text-xl font-bold text-white">{fmt(totalComplement)}</p>
+          <p className="text-xl font-bold text-white">{formatCFA(totalComplement)}</p>
           <p className="text-xs text-slate-600">total</p>
         </div>
         <div className="card p-4 space-y-1 border-l-2 border-orange-500/50">
@@ -336,16 +332,16 @@ export default function TrocsPage() {
                           <Smartphone className="w-3.5 h-3.5 text-red-400/60 flex-shrink-0" />
                           <span className="text-slate-300 text-xs">{t.product_given_name}</span>
                         </div>
-                        <p className="text-xs text-slate-500 mt-0.5 ml-5">{fmt(t.product_given_price)}</p>
+                        <p className="text-xs text-slate-500 mt-0.5 ml-5">{formatCFA(t.product_given_price)}</p>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
                           <Smartphone className="w-3.5 h-3.5 text-emerald-400/60 flex-shrink-0" />
                           <span className="text-slate-300 text-xs">{t.product_received_name}</span>
                         </div>
-                        <p className="text-xs text-slate-500 mt-0.5 ml-5">{fmt(t.product_received_value)}</p>
+                        <p className="text-xs text-slate-500 mt-0.5 ml-5">{formatCFA(t.product_received_value)}</p>
                       </td>
-                      <td className="px-4 py-3 text-right font-bold text-neon-violet">{fmt(t.complement)}</td>
+                      <td className="px-4 py-3 text-right font-bold text-neon-violet">{formatCFA(t.complement)}</td>
                       <td className="px-4 py-3 text-slate-400 whitespace-nowrap text-xs">{formatDate(t.troc_date ?? t.created_at)}</td>
                       <td className="px-4 py-3 text-center">
                         {t.payment_method === 'credit' && !t.is_settled ? (
@@ -398,7 +394,7 @@ export default function TrocsPage() {
                 <tfoot>
                   <tr className="border-t border-dark-600 bg-dark-800/60">
                     <td colSpan={4} className="px-4 py-3 text-xs font-medium text-slate-400">Total compléments</td>
-                    <td className="px-4 py-3 text-right font-bold text-neon-violet">{fmt(totalComplement)}</td>
+                    <td className="px-4 py-3 text-right font-bold text-neon-violet">{formatCFA(totalComplement)}</td>
                     <td colSpan={3} />
                   </tr>
                 </tfoot>
@@ -446,8 +442,8 @@ export default function TrocsPage() {
                           p.stock_qty === 0 ? 'text-red-400' : 'text-emerald-400'
                         )}>{p.stock_qty}</span>
                       </td>
-                      <td className="px-4 py-3 text-right text-slate-300">{fmt(p.buy_price)}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-white">{fmt(p.sell_price)}</td>
+                      <td className="px-4 py-3 text-right text-slate-300">{formatCFA(p.buy_price)}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-white">{formatCFA(p.sell_price)}</td>
                       <td className="px-4 py-3 text-center">
                         {p.stock_qty === 0
                           ? <span className="badge-red text-xs">Vendu</span>
@@ -462,7 +458,7 @@ export default function TrocsPage() {
                       {reprises.length} téléphone(s) repris · {reprises.filter(p => p.stock_qty > 0).length} encore en stock
                     </td>
                     <td className="px-4 py-3 text-right font-bold text-emerald-400">
-                      {fmt(reprises.reduce((s, p) => s + p.buy_price, 0))}
+                      {formatCFA(reprises.reduce((s, p) => s + p.buy_price, 0))}
                     </td>
                     <td colSpan={2} />
                   </tr>
@@ -602,14 +598,14 @@ export default function TrocsPage() {
                   <div>
                     <p className="text-xs text-slate-400 font-medium">Complément à encaisser</p>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      {fmt(parseFloat(givenPrice) || 0)} − {fmt(parseFloat(receivedValue) || 0)}
+                      {formatCFA(parseFloat(givenPrice) || 0)} − {formatCFA(parseFloat(receivedValue) || 0)}
                     </p>
                   </div>
                   <p className={cn(
                     'text-2xl font-bold',
                     complement >= 0 ? 'text-neon-violet' : 'text-emerald-400'
                   )}>
-                    {fmt(Math.abs(complement))}
+                    {formatCFA(Math.abs(complement))}
                     {complement < 0 && <span className="text-xs ml-1 font-normal">à rendre</span>}
                   </p>
                 </div>
@@ -650,14 +646,14 @@ export default function TrocsPage() {
                         type="number"
                         value={acompte}
                         onChange={e => setAcompte(e.target.value)}
-                        placeholder={`Max : ${fmt(complement)}`}
+                        placeholder={`Max : ${formatCFA(complement)}`}
                         min={0}
                         max={complement}
                         className="input w-full"
                       />
                       {acompte && parseFloat(acompte) < complement && (
                         <p className="text-xs text-orange-400 mt-1">
-                          Solde restant dû : {fmt(complement - parseFloat(acompte))} → ira en créances
+                          Solde restant dû : {formatCFA(complement - parseFloat(acompte))} → ira en créances
                         </p>
                       )}
                     </div>

@@ -7,7 +7,7 @@ import {
   Calendar, ChevronDown, ChevronUp, Loader2, PiggyBank,
   Banknote, Smartphone, Building2, X, Check
 } from 'lucide-react';
-import { cn, localDateStr } from '@/lib/utils';
+import { cn, localDateStr, formatCFA } from '@/lib/utils';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface TreasuryAccount {
@@ -69,10 +69,6 @@ function getDateRange(period: Period): { from: string | null; to: string } {
   // year
   const from = new Date(now.getFullYear(), 0, 1).toISOString();
   return { from, to };
-}
-
-function fmt(n: number) {
-  return new Intl.NumberFormat('fr-FR').format(Math.round(n)) + ' FCFA';
 }
 
 // Les colonnes `date` SQL (expense_date, dates d'apport/retrait) n'ont pas
@@ -421,18 +417,18 @@ export default function TresoreriePage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="card p-5">
           <p className="text-xs text-slate-500 mb-1">Solde début de période</p>
-          <p className="text-2xl font-bold text-white">{fmt(totalDebut)}</p>
+          <p className="text-2xl font-bold text-white">{formatCFA(totalDebut)}</p>
         </div>
         <div className={cn('card p-5 border', diff >= 0 ? 'border-emerald-500/20' : 'border-red-500/20')}>
           <p className="text-xs text-slate-500 mb-1">Variation sur la période</p>
           <p className={cn('text-2xl font-bold flex items-center gap-1', diff >= 0 ? 'text-emerald-400' : 'text-red-400')}>
             {diff >= 0 ? <TrendingUp className="w-5 h-5" /> : <TrendingDown className="w-5 h-5" />}
-            {diff >= 0 ? '+' : ''}{fmt(diff)}
+            {diff >= 0 ? '+' : ''}{formatCFA(diff)}
           </p>
         </div>
         <div className="card p-5 border border-neon-blue/20">
           <p className="text-xs text-slate-500 mb-1">Solde fin de période</p>
-          <p className="text-2xl font-bold text-neon-blue">{fmt(totalFin)}</p>
+          <p className="text-2xl font-bold text-neon-blue">{formatCFA(totalFin)}</p>
         </div>
       </div>
 
@@ -457,7 +453,7 @@ export default function TresoreriePage() {
                   <div>
                     <p className="font-semibold text-slate-200 text-sm">{acc.name}</p>
                     <p className="text-xs text-slate-500">
-                      Solde initial : {fmt(acc.initial_balance)}
+                      Solde initial : {formatCFA(acc.initial_balance)}
                     </p>
                   </div>
                 </div>
@@ -466,20 +462,20 @@ export default function TresoreriePage() {
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-400">Début de période</span>
-                    <span className="font-mono text-slate-200">{fmt(b.debut)}</span>
+                    <span className="font-mono text-slate-200">{formatCFA(b.debut)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-400">Entrées</span>
-                    <span className="font-mono text-emerald-400">+{fmt(b.entrees)}</span>
+                    <span className="font-mono text-emerald-400">+{formatCFA(b.entrees)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-400">Sorties</span>
-                    <span className="font-mono text-red-400">-{fmt(b.sorties)}</span>
+                    <span className="font-mono text-red-400">-{formatCFA(b.sorties)}</span>
                   </div>
                   <div className="border-t border-dark-600 pt-2 flex justify-between">
                     <span className="text-sm font-semibold text-slate-200">Solde fin</span>
                     <span className={cn('font-bold text-sm', b.fin >= 0 ? 'text-neon-blue' : 'text-red-400')}>
-                      {fmt(b.fin)}
+                      {formatCFA(b.fin)}
                     </span>
                   </div>
                 </div>
@@ -490,7 +486,7 @@ export default function TresoreriePage() {
                   variation >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
                 )}>
                   {variation >= 0 ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                  {variation >= 0 ? '+' : ''}{fmt(variation)} sur la période
+                  {variation >= 0 ? '+' : ''}{formatCFA(variation)} sur la période
                 </div>
               </div>
             );
@@ -512,7 +508,7 @@ export default function TresoreriePage() {
                   <p className="text-sm text-slate-200">{ap.account?.name}</p>
                   <p className="text-xs text-slate-500">{new Date(ap.date).toLocaleDateString('fr-FR')} {ap.note ? `— ${ap.note}` : ''}</p>
                 </div>
-                <span className="text-emerald-400 font-semibold text-sm">+{fmt(ap.amount)}</span>
+                <span className="text-emerald-400 font-semibold text-sm">+{formatCFA(ap.amount)}</span>
               </div>
             ))}
           </div>
@@ -533,7 +529,7 @@ export default function TresoreriePage() {
                   <p className="text-sm text-slate-200">{rt.account?.name}</p>
                   <p className="text-xs text-slate-500">{new Date(rt.date).toLocaleDateString('fr-FR')} {rt.note ? `— ${rt.note}` : ''}</p>
                 </div>
-                <span className="text-red-400 font-semibold text-sm">-{fmt(rt.amount)}</span>
+                <span className="text-red-400 font-semibold text-sm">-{formatCFA(rt.amount)}</span>
               </div>
             ))}
           </div>
