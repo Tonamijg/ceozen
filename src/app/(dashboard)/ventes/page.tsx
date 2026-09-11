@@ -216,27 +216,36 @@ export default function VentesPage() {
 
     setSaving(true);
 
-    const { data: { user } } = await supabase.auth.getUser();
-
     // Une vente à crédit dont l'acompte couvre déjà le total est soldée dès
     // la saisie — sinon elle reste indéfiniment affichée comme créance
     // ouverte pour son montant total (bug corrigé le 2026-09-10).
     const isCreditSettledByAcompte = paymentMethod === 'credit' && acompte >= total;
     const isSettled = paymentMethod !== 'credit' || isCreditSettledByAcompte;
 
-    const { data: sale, error } = await supabase.from('sales').insert({
-      seller_id:       user!.id,
-      payment_method:  paymentMethod,
-      notes:           notes || null,
-      client_id:       clientId || null,
-      client_name:     clientName || null,
-      credit_due_date: paymentMethod === 'credit' && !isCreditSettledByAcompte ? creditDueDate || null : null,
-      is_settled:      isSettled,
-      sale_date:       saleDate,
-      acompte:         paymentMethod === 'credit' ? acompte : 0,
-    }).select('id').single();
+    // Vente + lignes créées en une seule transaction côté base
+    // (public.create_sale_with_items, migration 010) : le contrôle de
+    // stock ci-dessus donne un retour immédiat à l'utilisateur, mais ne
+    // protège pas contre deux ventes concurrentes sur le même article —
+    // c'est la fonction RPC, avec un verrou ligne par produit, qui garantit
+    // l'atomicité réelle (MÉT-5, corrigé le 2026-09-11).
+    const { data: saleId, error } = await supabase.rpc('create_sale_with_items', {
+      p_payment_method:  paymentMethod,
+      p_client_id:       clientId || null,
+      p_client_name:     clientName || null,
+      p_notes:           notes || null,
+      p_credit_due_date: paymentMethod === 'credit' && !isCreditSettledByAcompte ? creditDueDate || null : null,
+      p_is_settled:      isSettled,
+      p_sale_date:       saleDate,
+      p_acompte:         paymentMethod === 'credit' ? acompte : 0,
+      p_items: lines.map(l => ({
+        product_id: l.product.id,
+        qty:        l.qty,
+        unit_price: l.unit_price,
+        discount:   l.discount,
+      })),
+    });
 
-    if (error || !sale) {
+    if (error || !saleId) {
       setSaving(false);
       setError(`Erreur lors de l'enregistrement : ${error?.message ?? 'Réponse vide du serveur'}`);
       setTimeout(() => setError(''), 8000);
@@ -249,23 +258,6 @@ export default function VentesPage() {
         .upsert({ name: clientName.trim() }, { onConflict: 'name', ignoreDuplicates: true });
     }
 
-    const { error: itemsError } = await supabase.from('sale_items').insert(
-      lines.map(l => ({
-        sale_id:    sale.id,
-        product_id: l.product.id,
-        qty:        l.qty,
-        unit_price: l.unit_price,
-        discount:   l.discount,
-      }))
-    );
-
-    if (itemsError) {
-      setSaving(false);
-      setError(`Vente créée mais erreur sur les articles : ${itemsError.message}`);
-      setTimeout(() => setError(''), 8000);
-      return;
-    }
-
     // Notification WhatsApp
     const { data: { user: seller } } = await supabase.auth.getUser();
     const sellerProfile = seller ? await supabase.from('profiles').select('full_name').eq('id', seller.id).single() : null;
@@ -275,7 +267,7 @@ export default function VentesPage() {
       body: JSON.stringify({
         type: 'vente',
         data: {
-          sale_number:    sale.id,
+          sale_number:    saleId,
           client_name:    clientName || undefined,
           total,
           payment_method: PAYMENT_LABELS[paymentMethod],
