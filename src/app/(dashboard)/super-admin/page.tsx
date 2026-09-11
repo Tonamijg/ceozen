@@ -28,7 +28,7 @@ interface AuditLog {
 interface EditableSale {
   id: string; sale_number: string; client_name: string | null;
   payment_method: string; notes: string | null;
-  sale_date: string; total: number;
+  sale_date: string; total: number; is_settled: boolean;
 }
 
 interface EditableExpense {
@@ -162,7 +162,7 @@ export default function SuperAdminPage() {
   const loadEdition = useCallback(async (sub: EditionSub) => {
     if (sub === 'ventes') {
       const { data } = await supabase
-        .from('v_sales').select('id,sale_number,client_name,payment_method,notes,sale_date,total')
+        .from('v_sales').select('id,sale_number,client_name,payment_method,notes,sale_date,total,is_settled')
         .order('sale_date', { ascending: false }).limit(200);
       setSales((data ?? []) as EditableSale[]);
     } else if (sub === 'depenses') {
@@ -215,6 +215,14 @@ export default function SuperAdminPage() {
       payment_method: editSale.payment_method,
       notes:          editSale.notes || null,
       sale_date:      editSale.sale_date,
+      // Corrige un moyen de paiement passé à 'credit' sans réajuster
+      // is_settled : la vente disparaissait alors à la fois de la caisse
+      // (exclue car payment_method='credit') et des créances actives
+      // (exclue car is_settled restait true) — MÉT-4, atténué le
+      // 2026-09-11. Pour les autres moyens de paiement, is_settled n'est
+      // pas utilisé par le calcul de trésorerie donc sans risque de le
+      // renvoyer tel quel.
+      is_settled:     editSale.is_settled,
     }).eq('id', editSale.id);
     setEdSaving(false);
     if (error) showToast(error.message, 'err');
@@ -728,6 +736,16 @@ export default function SuperAdminPage() {
                               <select className="input text-xs py-1" value={editSale.payment_method} onChange={e => setEditSale({...editSale, payment_method: e.target.value})}>
                                 {['especes','mobile_money','carte','virement','credit'].map(v => <option key={v} value={v}>{v}</option>)}
                               </select>
+                              {editSale.payment_method === 'credit' && (
+                                <label className="flex items-center gap-1.5 mt-1 text-[11px] text-slate-400 whitespace-nowrap">
+                                  <input
+                                    type="checkbox"
+                                    checked={editSale.is_settled}
+                                    onChange={e => setEditSale({ ...editSale, is_settled: e.target.checked })}
+                                  />
+                                  Soldée (encaissée)
+                                </label>
+                              )}
                             </td>
                             <td className="px-4 py-2"><input className="input text-xs py-1" value={editSale.notes ?? ''} onChange={e => setEditSale({...editSale, notes: e.target.value})} placeholder="Notes" /></td>
                             <td className="px-4 py-2.5 text-right text-slate-400 text-xs">{formatCFA(s.total)}</td>
