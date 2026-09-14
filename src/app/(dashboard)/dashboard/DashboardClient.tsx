@@ -16,7 +16,7 @@ import Link from 'next/link';
 import { formatDateTime, localDateStr, formatCFA, cn } from '@/lib/utils';
 import { fetchTreasuryRawData, computeAccountBalance, computeTreasuryDailyRow, computePointFinancierRow } from '@/lib/treasury';
 import type { DailyReportData, DailyReportSections, DailySaleRow, DailySaleLineRow, DailyCreditRow } from '@/lib/dailyReportPdf';
-import type { PointFinancierData, PointFinancierAccountRow } from '@/lib/pointFinancierPdf';
+import type { PointFinancierData, PointFinancierAccountRow, PointFinancierSections } from '@/lib/pointFinancierPdf';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ChartData { date: string; revenue: number; expenses: number; }
@@ -135,6 +135,12 @@ export default function DashboardClient({
   const [reportSections, setReportSections] = useState<Required<DailyReportSections>>({
     summary: true, sales: true, trocs: true, expenses: true,
     treasury: true, newCredits: true, sellerStats: true,
+  });
+  const [showPFSections, setShowPFSections] = useState(false);
+  const [pfSections, setPfSections] = useState<Required<PointFinancierSections>>({
+    summary: true, encaissementVentes: true, complementTrocs: true, apportsDG: true,
+    reglementsClients: true, decaissementsAchats: true, decaissementsTrocs: true,
+    retraitDG: true, autresDepenses: true,
   });
 
   // ── Fetches stats for a given period ────────────────────────────────────────
@@ -380,7 +386,7 @@ export default function DashboardClient({
   }, [supabase]);
 
   // ── Point financier (PDF) ────────────────────────────────────────────────────
-  const handlePointFinancier = useCallback(async () => {
+  const handlePointFinancier = useCallback(async (sections: PointFinancierSections) => {
     setExportingPF(true);
     try {
       const now      = new Date();
@@ -397,7 +403,7 @@ export default function DashboardClient({
       const reportData: PointFinancierData = { date: dateStr, accounts };
 
       const { generatePointFinancierPDF } = await import('@/lib/pointFinancierPdf');
-      await generatePointFinancierPDF(reportData);
+      await generatePointFinancierPDF(reportData, sections);
     } finally {
       setExportingPF(false);
     }
@@ -474,7 +480,7 @@ export default function DashboardClient({
             {exportingDaily ? 'Génération…' : 'Rapport du jour'}
           </button>
           <button
-            onClick={handlePointFinancier}
+            onClick={() => setShowPFSections(true)}
             disabled={exportingPF}
             className="btn-secondary py-1.5 text-xs ml-1"
           >
@@ -644,6 +650,78 @@ export default function DashboardClient({
               >
                 {exportingDaily ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                 {exportingDaily ? 'Génération…' : 'Générer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal sélection des lignes du point financier ────────────────────── */}
+      {showPFSections && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="card w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-slate-200 flex items-center gap-2">
+                <Wallet className="w-5 h-5 text-neon-blue" /> Point financier
+              </h3>
+              <button type="button" onClick={() => setShowPFSections(false)}>
+                <X className="w-5 h-5 text-slate-500 hover:text-slate-200" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-500">
+              Choisissez les lignes à inclure dans le tableau de réconciliation. Les totaux et le solde final restent toujours complets, quelles que soient les lignes affichées.
+            </p>
+
+            <div className="space-y-2">
+              <label className="flex items-center gap-2.5 text-sm text-slate-300 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={pfSections.summary}
+                  onChange={(e) => setPfSections(prev => ({ ...prev, summary: e.target.checked }))}
+                  className="w-4 h-4 rounded border-dark-500 accent-neon-blue"
+                />
+                Résumé global (KPIs)
+              </label>
+
+              <div className="border-t border-dark-600 my-1" />
+
+              {(
+                [
+                  ['encaissementVentes', 'Encaissement sur ventes'],
+                  ['complementTrocs',    'Complément reçus sur trocs'],
+                  ['apportsDG',          'Apports DG'],
+                  ['reglementsClients',  'Règlements clients reçus'],
+                  ['decaissementsAchats','Décaissements sur achats'],
+                  ['decaissementsTrocs', 'Décaissements sur trocs'],
+                  ['retraitDG',          'Retrait DG'],
+                  ['autresDepenses',     'Autres dépenses'],
+                ] as [keyof PointFinancierSections, string][]
+              ).map(([key, label]) => (
+                <label key={key} className="flex items-center gap-2.5 text-sm text-slate-300 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={pfSections[key]}
+                    onChange={(e) => setPfSections(prev => ({ ...prev, [key]: e.target.checked }))}
+                    className="w-4 h-4 rounded border-dark-500 accent-neon-blue"
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button type="button" onClick={() => setShowPFSections(false)} className="btn-secondary">Annuler</button>
+              <button
+                type="button"
+                disabled={exportingPF}
+                onClick={async () => {
+                  await handlePointFinancier(pfSections);
+                  setShowPFSections(false);
+                }}
+                className="btn-primary min-w-32 flex items-center gap-2 justify-center"
+              >
+                {exportingPF ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                {exportingPF ? 'Génération…' : 'Générer'}
               </button>
             </div>
           </div>

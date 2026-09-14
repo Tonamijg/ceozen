@@ -30,19 +30,50 @@ export interface PointFinancierData {
   accounts: PointFinancierAccountRow[];
 }
 
+/**
+ * Contrôle quelles lignes de détail apparaissent dans le tableau de
+ * réconciliation. `summary` bascule le bloc KPI "Résumé global" en haut du
+ * PDF. Les lignes "anchor" (Solde initial/final) et "subtotal"
+ * (Total entrées/sorties) restent toujours affichées et toujours calculées
+ * sur l'intégralité des données — masquer une ligne de détail est un choix
+ * d'affichage, ça ne doit jamais changer les totaux ni le solde final.
+ */
+export interface PointFinancierSections {
+  summary?: boolean;
+  encaissementVentes?: boolean;
+  complementTrocs?: boolean;
+  apportsDG?: boolean;
+  reglementsClients?: boolean;
+  decaissementsAchats?: boolean;
+  decaissementsTrocs?: boolean;
+  retraitDG?: boolean;
+  autresDepenses?: boolean;
+}
+
+const DEFAULT_SECTIONS: Required<PointFinancierSections> = {
+  summary: true, encaissementVentes: true, complementTrocs: true, apportsDG: true,
+  reglementsClients: true, decaissementsAchats: true, decaissementsTrocs: true,
+  retraitDG: true, autresDepenses: true,
+};
+
 type RowKind = 'anchor' | 'detail' | 'subtotal-in' | 'subtotal-out';
 
 interface TableRow {
   label: string;
   kind: RowKind;
   values: number[]; // one per account, same order as data.accounts
+  sectionKey?: keyof PointFinancierSections;
 }
 
 function cellText(n: number): string {
   return n === 0 ? '—' : fmtNum(n);
 }
 
-export async function generatePointFinancierPDF(data: PointFinancierData): Promise<void> {
+export async function generatePointFinancierPDF(
+  data: PointFinancierData,
+  sections: PointFinancierSections = {}
+): Promise<void> {
+  const show = { ...DEFAULT_SECTIONS, ...sections };
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const logo = await loadKtechLogoDataUrl().catch(() => undefined);
 
@@ -70,25 +101,29 @@ export async function generatePointFinancierPDF(data: PointFinancierData): Promi
   const totalSoldeFinal = accounts.reduce((s, a) => s + a.soldeFinal, 0);
 
   // ── KPIs ──────────────────────────────────────────────────
-  let y = sectionTitle(doc, 'Résumé global', 33);
+  let y = 33;
 
-  const gap = 4;
-  const boxW = (PAGE_W - 2 * MARGIN - 3 * gap) / 4;
-  const boxH = 20;
+  if (show.summary) {
+    y = sectionTitle(doc, 'Résumé global', y);
 
-  const kpis: { label: string; value: string; accent: [number, number, number] }[] = [
-    { label: 'Solde initial',   value: fmtCompact(totalSoldeInitial), accent: NAVY },
-    { label: "Total entrées",   value: fmtCompact(totalEntrees),      accent: GREEN },
-    { label: 'Total sorties',   value: fmtCompact(totalSorties),      accent: RED },
-    { label: 'Solde final',     value: fmtCompact(totalSoldeFinal),   accent: BLUE },
-  ];
+    const gap = 4;
+    const boxW = (PAGE_W - 2 * MARGIN - 3 * gap) / 4;
+    const boxH = 20;
 
-  kpis.forEach((kpi, i) => {
-    const x = MARGIN + i * (boxW + gap);
-    drawKpiBox(doc, x, y, boxW, boxH, kpi.label, kpi.value, kpi.accent);
-  });
+    const kpis: { label: string; value: string; accent: [number, number, number] }[] = [
+      { label: 'Solde initial',   value: fmtCompact(totalSoldeInitial), accent: NAVY },
+      { label: "Total entrées",   value: fmtCompact(totalEntrees),      accent: GREEN },
+      { label: 'Total sorties',   value: fmtCompact(totalSorties),      accent: RED },
+      { label: 'Solde final',     value: fmtCompact(totalSoldeFinal),   accent: BLUE },
+    ];
 
-  y += boxH + 10;
+    kpis.forEach((kpi, i) => {
+      const x = MARGIN + i * (boxW + gap);
+      drawKpiBox(doc, x, y, boxW, boxH, kpi.label, kpi.value, kpi.accent);
+    });
+
+    y += boxH + 10;
+  }
 
   // ── Table de réconciliation ──────────────────────────────────
   y = sectionTitle(doc, 'Réconciliation par compte', y, BLUE);
@@ -100,20 +135,25 @@ export async function generatePointFinancierPDF(data: PointFinancierData): Promi
     return;
   }
 
-  const rows: TableRow[] = [
+  const allRows: TableRow[] = [
     { label: 'Solde initial',                          kind: 'anchor',       values: accounts.map(a => a.soldeInitial) },
-    { label: 'Encaissement sur ventes de la journée',   kind: 'detail',       values: accounts.map(a => a.encaissementVentes) },
-    { label: 'Complément reçus sur trocs',              kind: 'detail',       values: accounts.map(a => a.complementTrocs) },
-    { label: 'Apports DG',                              kind: 'detail',       values: accounts.map(a => a.apportsDG) },
-    { label: 'Règlements clients reçus ce jour',        kind: 'detail',       values: accounts.map(a => a.reglementsClients) },
+    { label: 'Encaissement sur ventes de la journée',   kind: 'detail',       values: accounts.map(a => a.encaissementVentes), sectionKey: 'encaissementVentes' },
+    { label: 'Complément reçus sur trocs',              kind: 'detail',       values: accounts.map(a => a.complementTrocs), sectionKey: 'complementTrocs' },
+    { label: 'Apports DG',                              kind: 'detail',       values: accounts.map(a => a.apportsDG), sectionKey: 'apportsDG' },
+    { label: 'Règlements clients reçus ce jour',        kind: 'detail',       values: accounts.map(a => a.reglementsClients), sectionKey: 'reglementsClients' },
     { label: "Total des entrées d'argent",              kind: 'subtotal-in',  values: accounts.map(a => a.encaissementVentes + a.complementTrocs + a.apportsDG + a.reglementsClients) },
-    { label: 'Décaissements sur achats de téléphones',  kind: 'detail',       values: accounts.map(a => a.decaissementsAchats) },
-    { label: 'Décaissements sur trocs réalisés',        kind: 'detail',       values: accounts.map(a => a.decaissementsTrocs) },
-    { label: 'Retrait DG',                              kind: 'detail',       values: accounts.map(a => a.retraitDG) },
-    { label: 'Autres dépenses',                         kind: 'detail',       values: accounts.map(a => a.autresDepenses) },
+    { label: 'Décaissements sur achats de téléphones',  kind: 'detail',       values: accounts.map(a => a.decaissementsAchats), sectionKey: 'decaissementsAchats' },
+    { label: 'Décaissements sur trocs réalisés',        kind: 'detail',       values: accounts.map(a => a.decaissementsTrocs), sectionKey: 'decaissementsTrocs' },
+    { label: 'Retrait DG',                              kind: 'detail',       values: accounts.map(a => a.retraitDG), sectionKey: 'retraitDG' },
+    { label: 'Autres dépenses',                         kind: 'detail',       values: accounts.map(a => a.autresDepenses), sectionKey: 'autresDepenses' },
     { label: 'Total des sorties d\'argent',             kind: 'subtotal-out', values: accounts.map(a => a.decaissementsAchats + a.decaissementsTrocs + a.retraitDG + a.autresDepenses) },
     { label: 'Solde Final',                             kind: 'anchor',       values: accounts.map(a => a.soldeFinal) },
   ];
+
+  // Les totaux/soldes ci-dessus sont déjà calculés sur l'intégralité des
+  // données — masquer une ligne de détail ne fait que la retirer de
+  // l'affichage, sans jamais changer un total.
+  const rows = allRows.filter(r => !r.sectionKey || show[r.sectionKey]);
 
   autoTable(doc, {
     startY: y,
