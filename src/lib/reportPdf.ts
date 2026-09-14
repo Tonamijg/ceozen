@@ -48,7 +48,24 @@ export interface ReportPdfData {
   stockSnapshot: VStockAlert[];
 }
 
-export async function generateReportPDF(data: ReportPdfData): Promise<void> {
+/** Une entrée par section du rapport — omise ou à `true` = section incluse. */
+export interface ReportSections {
+  summary?: boolean;
+  topProducts?: boolean;
+  expensesByCat?: boolean;
+  sellerStats?: boolean;
+  stock?: boolean;
+}
+
+const DEFAULT_SECTIONS: Required<ReportSections> = {
+  summary: true, topProducts: true, expensesByCat: true, sellerStats: true, stock: true,
+};
+
+export async function generateReportPDF(
+  data: ReportPdfData,
+  sections: ReportSections = {}
+): Promise<void> {
+  const show = { ...DEFAULT_SECTIONS, ...sections };
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const logo = await loadKtechLogoDataUrl().catch(() => undefined);
   const meta: PdfHeaderMeta = {
@@ -61,34 +78,39 @@ export async function generateReportPDF(data: ReportPdfData): Promise<void> {
   drawFooter(doc);
 
   // ── KPIs ──────────────────────────────────────────────────
-  let y = sectionTitle(doc, 'Vue d\'ensemble', 33);
+  let y = 33;
 
-  const gap = 4;
-  const boxW = (PAGE_W - 2 * MARGIN - 3 * gap) / 4;
-  const boxH = 20;
+  if (show.summary) {
+    y = sectionTitle(doc, 'Vue d\'ensemble', y);
 
-  const kpis: { label: string; value: string; accent: [number, number, number] }[] = [
-    { label: "Chiffre d'affaires", value: fmtCompact(data.totalRevenue), accent: BLUE },
-    { label: 'Dépenses totales', value: fmtCompact(data.totalExpenses), accent: ORANGE },
-    { label: 'Marge nette', value: fmtCompact(data.margin), accent: data.margin >= 0 ? GREEN : RED },
-    { label: 'Nombre de ventes', value: data.salesCount.toLocaleString('fr-FR'), accent: VIOLET },
-    { label: 'Panier moyen', value: fmtCompact(data.avgSale), accent: MUTED },
-    { label: `Trocs (${data.trocsCount})`, value: fmtCompact(data.trocsRevenue), accent: VIOLET },
-    { label: 'Valeur du stock', value: fmtCompact(data.totalStockValue), accent: BLUE },
-    { label: 'Produits en alerte', value: String(data.stockSnapshot.filter(p => p.is_low_stock).length), accent: ORANGE },
-  ];
+    const gap = 4;
+    const boxW = (PAGE_W - 2 * MARGIN - 3 * gap) / 4;
+    const boxH = 20;
 
-  kpis.forEach((kpi, i) => {
-    const col = i % 4;
-    const row = Math.floor(i / 4);
-    const x = MARGIN + col * (boxW + gap);
-    const by = y + row * (boxH + gap);
-    drawKpiBox(doc, x, by, boxW, boxH, kpi.label, kpi.value, kpi.accent);
-  });
+    const kpis: { label: string; value: string; accent: [number, number, number] }[] = [
+      { label: "Chiffre d'affaires", value: fmtCompact(data.totalRevenue), accent: BLUE },
+      { label: 'Dépenses totales', value: fmtCompact(data.totalExpenses), accent: ORANGE },
+      { label: 'Marge nette', value: fmtCompact(data.margin), accent: data.margin >= 0 ? GREEN : RED },
+      { label: 'Nombre de ventes', value: data.salesCount.toLocaleString('fr-FR'), accent: VIOLET },
+      { label: 'Panier moyen', value: fmtCompact(data.avgSale), accent: MUTED },
+      { label: `Trocs (${data.trocsCount})`, value: fmtCompact(data.trocsRevenue), accent: VIOLET },
+      { label: 'Valeur du stock', value: fmtCompact(data.totalStockValue), accent: BLUE },
+      { label: 'Produits en alerte', value: String(data.stockSnapshot.filter(p => p.is_low_stock).length), accent: ORANGE },
+    ];
 
-  y = y + 2 * (boxH + gap) + 4;
+    kpis.forEach((kpi, i) => {
+      const col = i % 4;
+      const row = Math.floor(i / 4);
+      const x = MARGIN + col * (boxW + gap);
+      const by = y + row * (boxH + gap);
+      drawKpiBox(doc, x, by, boxW, boxH, kpi.label, kpi.value, kpi.accent);
+    });
+
+    y = y + 2 * (boxH + gap) + 4;
+  }
 
   // ── Top produits ──────────────────────────────────────────
+  if (show.topProducts) {
   y = ensureSpace(doc, y, 20, meta);
   y = sectionTitle(doc, 'Top produits (CA)', y, BLUE);
 
@@ -115,8 +137,10 @@ export async function generateReportPDF(data: ReportPdfData): Promise<void> {
   } else {
     y = emptyStateText(doc, 'Aucune vente sur la période.', y);
   }
+  }
 
   // ── Dépenses par catégorie ────────────────────────────────
+  if (show.expensesByCat) {
   y = ensureSpace(doc, y, 20, meta);
   y = sectionTitle(doc, 'Dépenses par catégorie', y, ORANGE);
 
@@ -143,8 +167,10 @@ export async function generateReportPDF(data: ReportPdfData): Promise<void> {
   } else {
     y = emptyStateText(doc, 'Aucune dépense sur la période.', y);
   }
+  }
 
   // ── Performance par vendeur ───────────────────────────────
+  if (show.sellerStats) {
   y = ensureSpace(doc, y, 20, meta);
   y = sectionTitle(doc, 'Performance par vendeur', y, VIOLET);
 
@@ -168,8 +194,10 @@ export async function generateReportPDF(data: ReportPdfData): Promise<void> {
   } else {
     y = emptyStateText(doc, 'Aucune vente sur la période.', y);
   }
+  }
 
   // ── État du stock ─────────────────────────────────────────
+  if (show.stock) {
   y = ensureSpace(doc, y, 20, meta);
   y = sectionTitle(doc, `État du stock à date — Valeur totale : ${fmt(data.totalStockValue)}`, y, BLUE);
 
@@ -204,6 +232,7 @@ export async function generateReportPDF(data: ReportPdfData): Promise<void> {
     });
   } else {
     emptyStateText(doc, 'Aucun produit en stock.', y);
+  }
   }
 
   drawPageNumbers(doc);

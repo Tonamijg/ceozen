@@ -7,8 +7,10 @@ import type { VStockAlert } from '@/types';
 import {
   BarChart3, TrendingUp, Package, Receipt,
   Download, RefreshCw, FileSpreadsheet, Printer,
-  ShoppingCart, AlertTriangle, ArrowLeftRight
+  ShoppingCart, AlertTriangle, ArrowLeftRight,
+  X, Check, Loader2
 } from 'lucide-react';
+import type { ReportSections } from '@/lib/reportPdf';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell,
@@ -92,6 +94,10 @@ export default function RapportsPage() {
   const [expensesByCat,  setExpensesByCat]  = useState<ExpenseByCat[]>([]);
   const [exporting,      setExporting]      = useState(false);
   const [exportingPdf,   setExportingPdf]   = useState(false);
+  const [showPdfSections, setShowPdfSections] = useState(false);
+  const [pdfSections, setPdfSections] = useState<Required<ReportSections>>({
+    summary: true, topProducts: true, expensesByCat: true, sellerStats: true, stock: true,
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -242,7 +248,7 @@ export default function RapportsPage() {
   }
 
   // Export PDF
-  async function handlePdfExport() {
+  async function handlePdfExport(sections: ReportSections) {
     setExportingPdf(true);
     try {
       const { generateReportPDF } = await import('@/lib/reportPdf');
@@ -261,7 +267,7 @@ export default function RapportsPage() {
         sellerStats,
         expensesByCat,
         stockSnapshot,
-      });
+      }, sections);
     } finally {
       setExportingPdf(false);
     }
@@ -302,7 +308,7 @@ export default function RapportsPage() {
             <FileSpreadsheet className="w-3.5 h-3.5" />
             {exporting ? 'Export…' : 'Excel'}
           </button>
-          <button onClick={handlePdfExport} disabled={exportingPdf} className="btn-primary py-2 text-sm">
+          <button onClick={() => setShowPdfSections(true)} disabled={exportingPdf} className="btn-primary py-2 text-sm">
             <Printer className="w-3.5 h-3.5" />
             {exportingPdf ? 'Génération…' : 'PDF'}
           </button>
@@ -544,6 +550,61 @@ export default function RapportsPage() {
           </table>
         </div>
       </div>
+
+      {/* ── Modal sélection des sections du rapport de gestion ───────────────── */}
+      {showPdfSections && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="card w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-slate-200 flex items-center gap-2">
+                <Printer className="w-5 h-5 text-neon-blue" /> Rapport de gestion
+              </h3>
+              <button type="button" onClick={() => setShowPdfSections(false)}>
+                <X className="w-5 h-5 text-slate-500 hover:text-slate-200" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-500">Choisissez les sections à inclure dans le PDF.</p>
+
+            <div className="space-y-2">
+              {(
+                [
+                  ['summary',       'Vue d\'ensemble (KPIs)'],
+                  ['topProducts',   'Top produits (CA)'],
+                  ['expensesByCat', 'Dépenses par catégorie'],
+                  ['sellerStats',   'Performance par vendeur'],
+                  ['stock',         'État du stock à date'],
+                ] as [keyof ReportSections, string][]
+              ).map(([key, label]) => (
+                <label key={key} className="flex items-center gap-2.5 text-sm text-slate-300 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={pdfSections[key]}
+                    onChange={(e) => setPdfSections(prev => ({ ...prev, [key]: e.target.checked }))}
+                    className="w-4 h-4 rounded border-dark-500 accent-neon-blue"
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button type="button" onClick={() => setShowPdfSections(false)} className="btn-secondary">Annuler</button>
+              <button
+                type="button"
+                disabled={exportingPdf || !Object.values(pdfSections).some(Boolean)}
+                onClick={async () => {
+                  await handlePdfExport(pdfSections);
+                  setShowPdfSections(false);
+                }}
+                className="btn-primary min-w-32 flex items-center gap-2 justify-center"
+              >
+                {exportingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                {exportingPdf ? 'Génération…' : 'Générer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
