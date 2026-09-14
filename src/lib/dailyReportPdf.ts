@@ -99,7 +99,27 @@ export interface DailyReportData {
   sellerStats: DailySellerRow[];
 }
 
-export async function generateDailyReportPDF(data: DailyReportData): Promise<void> {
+/** Une entrée par section du rapport — omise ou à `true` = section incluse. */
+export interface DailyReportSections {
+  summary?: boolean;
+  sales?: boolean;
+  trocs?: boolean;
+  expenses?: boolean;
+  treasury?: boolean;
+  newCredits?: boolean;
+  sellerStats?: boolean;
+}
+
+const DEFAULT_SECTIONS: Required<DailyReportSections> = {
+  summary: true, sales: true, trocs: true, expenses: true,
+  treasury: true, newCredits: true, sellerStats: true,
+};
+
+export async function generateDailyReportPDF(
+  data: DailyReportData,
+  sections: DailyReportSections = {}
+): Promise<void> {
+  const show = { ...DEFAULT_SECTIONS, ...sections };
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const logo = await loadKtechLogoDataUrl().catch(() => undefined);
 
@@ -119,32 +139,37 @@ export async function generateDailyReportPDF(data: DailyReportData): Promise<voi
   const margin = data.revenue - data.expenses;
 
   // ── KPIs ──────────────────────────────────────────────────
-  let y = sectionTitle(doc, "Résumé du jour", 33);
+  let y = 33;
 
-  const gap = 4;
-  const boxW = (PAGE_W - 2 * MARGIN - 2 * gap) / 3;
-  const boxH = 20;
+  if (show.summary) {
+    y = sectionTitle(doc, "Résumé du jour", y);
 
-  const kpis: { label: string; value: string; accent: [number, number, number] }[] = [
-    { label: "Chiffre d'affaires", value: fmtCompact(data.revenue), accent: BLUE },
-    { label: 'Dépenses', value: fmtCompact(data.expenses), accent: ORANGE },
-    { label: 'Marge', value: fmtCompact(margin), accent: margin >= 0 ? GREEN : RED },
-    { label: 'Nombre de ventes', value: data.salesCount.toLocaleString('fr-FR'), accent: VIOLET },
-    { label: 'Panier moyen', value: fmtCompact(data.avgSale), accent: MUTED },
-    { label: `Trocs (${data.trocsCount})`, value: fmtCompact(data.trocsRevenue), accent: VIOLET },
-  ];
+    const gap = 4;
+    const boxW = (PAGE_W - 2 * MARGIN - 2 * gap) / 3;
+    const boxH = 20;
 
-  kpis.forEach((kpi, i) => {
-    const col = i % 3;
-    const row = Math.floor(i / 3);
-    const x = MARGIN + col * (boxW + gap);
-    const by = y + row * (boxH + gap);
-    drawKpiBox(doc, x, by, boxW, boxH, kpi.label, kpi.value, kpi.accent);
-  });
+    const kpis: { label: string; value: string; accent: [number, number, number] }[] = [
+      { label: "Chiffre d'affaires", value: fmtCompact(data.revenue), accent: BLUE },
+      { label: 'Dépenses', value: fmtCompact(data.expenses), accent: ORANGE },
+      { label: 'Marge', value: fmtCompact(margin), accent: margin >= 0 ? GREEN : RED },
+      { label: 'Nombre de ventes', value: data.salesCount.toLocaleString('fr-FR'), accent: VIOLET },
+      { label: 'Panier moyen', value: fmtCompact(data.avgSale), accent: MUTED },
+      { label: `Trocs (${data.trocsCount})`, value: fmtCompact(data.trocsRevenue), accent: VIOLET },
+    ];
 
-  y = y + 2 * (boxH + gap) + 4;
+    kpis.forEach((kpi, i) => {
+      const col = i % 3;
+      const row = Math.floor(i / 3);
+      const x = MARGIN + col * (boxW + gap);
+      const by = y + row * (boxH + gap);
+      drawKpiBox(doc, x, by, boxW, boxH, kpi.label, kpi.value, kpi.accent);
+    });
+
+    y = y + 2 * (boxH + gap) + 4;
+  }
 
   // ── Ventes du jour ────────────────────────────────────────
+  if (show.sales) {
   y = ensureSpace(doc, y, 20, meta);
   y = sectionTitle(doc, 'Ventes du jour', y, BLUE);
 
@@ -187,8 +212,10 @@ export async function generateDailyReportPDF(data: DailyReportData): Promise<voi
   } else {
     y = emptyStateText(doc, 'Aucune vente aujourd\'hui.', y);
   }
+  }
 
   // ── Trocs du jour ─────────────────────────────────────────
+  if (show.trocs) {
   y = ensureSpace(doc, y, 20, meta);
   y = sectionTitle(doc, 'Trocs du jour', y, VIOLET);
 
@@ -215,8 +242,10 @@ export async function generateDailyReportPDF(data: DailyReportData): Promise<voi
   } else {
     y = emptyStateText(doc, 'Aucun troc aujourd\'hui.', y);
   }
+  }
 
   // ── Dépenses du jour ──────────────────────────────────────
+  if (show.expenses) {
   y = ensureSpace(doc, y, 20, meta);
   y = sectionTitle(doc, 'Dépenses du jour', y, ORANGE);
 
@@ -242,8 +271,10 @@ export async function generateDailyReportPDF(data: DailyReportData): Promise<voi
   } else {
     y = emptyStateText(doc, 'Aucune dépense aujourd\'hui.', y);
   }
+  }
 
   // ── Réconciliation trésorerie ─────────────────────────────
+  if (show.treasury) {
   y = ensureSpace(doc, y, 20, meta);
   y = sectionTitle(doc, 'Réconciliation trésorerie', y, BLUE);
 
@@ -276,8 +307,10 @@ export async function generateDailyReportPDF(data: DailyReportData): Promise<voi
   } else {
     y = emptyStateText(doc, 'Aucun compte de trésorerie configuré.', y);
   }
+  }
 
   // ── Nouvelles créances & dettes du jour ───────────────────
+  if (show.newCredits) {
   y = ensureSpace(doc, y, 20, meta);
   y = sectionTitle(doc, 'Nouvelles créances & dettes du jour', y, VIOLET);
 
@@ -309,8 +342,10 @@ export async function generateDailyReportPDF(data: DailyReportData): Promise<voi
   } else {
     y = emptyStateText(doc, 'Aucune nouvelle créance ou dette aujourd\'hui.', y);
   }
+  }
 
   // ── Performance vendeurs du jour ──────────────────────────
+  if (show.sellerStats) {
   y = ensureSpace(doc, y, 20, meta);
   y = sectionTitle(doc, 'Performance vendeurs du jour', y, VIOLET);
 
@@ -332,6 +367,7 @@ export async function generateDailyReportPDF(data: DailyReportData): Promise<voi
     });
   } else {
     emptyStateText(doc, 'Aucune vente aujourd\'hui.', y);
+  }
   }
 
   drawPageNumbers(doc);

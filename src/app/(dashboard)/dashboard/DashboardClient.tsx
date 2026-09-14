@@ -9,12 +9,13 @@ import SalesChart   from '@/components/dashboard/SalesChart';
 import type { DashboardStats, VStockAlert, VSale } from '@/types';
 import {
   TrendingUp, ShoppingBag, Package, AlertTriangle,
-  Wallet, RefreshCw, Calendar, Banknote, Smartphone, Building2, ArrowRight, FileDown
+  Wallet, RefreshCw, Calendar, Banknote, Smartphone, Building2, ArrowRight, FileDown,
+  X, Check, Loader2
 } from 'lucide-react';
 import Link from 'next/link';
 import { formatDateTime, localDateStr, formatCFA, cn } from '@/lib/utils';
 import { fetchTreasuryRawData, computeAccountBalance, computeTreasuryDailyRow, computePointFinancierRow } from '@/lib/treasury';
-import type { DailyReportData, DailySaleRow, DailySaleLineRow, DailyCreditRow } from '@/lib/dailyReportPdf';
+import type { DailyReportData, DailyReportSections, DailySaleRow, DailySaleLineRow, DailyCreditRow } from '@/lib/dailyReportPdf';
 import type { PointFinancierData, PointFinancierAccountRow } from '@/lib/pointFinancierPdf';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -130,6 +131,11 @@ export default function DashboardClient({
   const [treasury,   setTreasury]   = useState<{ name: string; type: string; solde: number }[]>([]);
   const [exportingDaily, setExportingDaily] = useState(false);
   const [exportingPF,    setExportingPF]    = useState(false);
+  const [showReportSections, setShowReportSections] = useState(false);
+  const [reportSections, setReportSections] = useState<Required<DailyReportSections>>({
+    summary: true, sales: true, trocs: true, expenses: true,
+    treasury: true, newCredits: true, sellerStats: true,
+  });
 
   // ── Fetches stats for a given period ────────────────────────────────────────
   const fetchPeriodStats = useCallback(async (p: Period) => {
@@ -200,7 +206,7 @@ export default function DashboardClient({
   }, [period, fetchPeriodStats]);
 
   // ── Rapport journalier (PDF) ─────────────────────────────────────────────────
-  const handleDailyReport = useCallback(async () => {
+  const handleDailyReport = useCallback(async (sections: DailyReportSections) => {
     setExportingDaily(true);
     try {
       const now      = new Date();
@@ -367,7 +373,7 @@ export default function DashboardClient({
       };
 
       const { generateDailyReportPDF } = await import('@/lib/dailyReportPdf');
-      await generateDailyReportPDF(reportData);
+      await generateDailyReportPDF(reportData, sections);
     } finally {
       setExportingDaily(false);
     }
@@ -460,7 +466,7 @@ export default function DashboardClient({
             Rafraîchir
           </button>
           <button
-            onClick={handleDailyReport}
+            onClick={() => setShowReportSections(true)}
             disabled={exportingDaily}
             className="btn-secondary py-1.5 text-xs ml-1"
           >
@@ -586,6 +592,63 @@ export default function DashboardClient({
       <div className="min-h-[320px]">
         <RecentSales sales={sales} />
       </div>
+
+      {/* ── Modal sélection des sections du rapport du jour ──────────────────── */}
+      {showReportSections && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="card w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-slate-200 flex items-center gap-2">
+                <FileDown className="w-5 h-5 text-neon-blue" /> Rapport du jour
+              </h3>
+              <button type="button" onClick={() => setShowReportSections(false)}>
+                <X className="w-5 h-5 text-slate-500 hover:text-slate-200" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-500">Choisissez les sections à inclure dans le PDF.</p>
+
+            <div className="space-y-2">
+              {(
+                [
+                  ['summary',     'Résumé (KPIs)'],
+                  ['sales',       'Ventes du jour'],
+                  ['trocs',       'Trocs du jour'],
+                  ['expenses',    'Dépenses du jour'],
+                  ['treasury',    'Réconciliation trésorerie'],
+                  ['newCredits',  'Nouvelles créances & dettes'],
+                  ['sellerStats', 'Performance vendeurs'],
+                ] as [keyof DailyReportSections, string][]
+              ).map(([key, label]) => (
+                <label key={key} className="flex items-center gap-2.5 text-sm text-slate-300 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={reportSections[key]}
+                    onChange={(e) => setReportSections(prev => ({ ...prev, [key]: e.target.checked }))}
+                    className="w-4 h-4 rounded border-dark-500 accent-neon-blue"
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button type="button" onClick={() => setShowReportSections(false)} className="btn-secondary">Annuler</button>
+              <button
+                type="button"
+                disabled={exportingDaily || !Object.values(reportSections).some(Boolean)}
+                onClick={async () => {
+                  await handleDailyReport(reportSections);
+                  setShowReportSections(false);
+                }}
+                className="btn-primary min-w-32 flex items-center gap-2 justify-center"
+              >
+                {exportingDaily ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                {exportingDaily ? 'Génération…' : 'Générer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
